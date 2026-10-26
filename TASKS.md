@@ -24,7 +24,7 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Shared schema + seed fixture, JSON roundtrip test (pytest + vitest)
 - [x] UI shell rendering the sample room (Playwright)
 - [x] Meta smoke script (Muse structured output + SAM on a local image via data URL); typechecks, refuses without a key
-- [ ] **Smoke script executed against the live API — NOT DONE: no `MODEL_API_KEY` available yet**
+- [x] Smoke script executed against the live API (2026-10-26): Muse structured output OK; SAM found 2 beds + 1 desk in the CC0 sample photo
 
 ## Geometry validation
 

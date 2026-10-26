@@ -21,7 +21,7 @@ Progress is tracked in `TASKS.md`.
 | Planner `analyze`: containment, collisions, door width, approach zones, clearance-aware routes, turning circle | Muse/SAM in the UI |
 | Verified route overlay, reachable area, failed-object highlighting, stale-result warning | Before/after, print view, benchmark |
 | Save/load JSON, sample-room reset | Deployment |
-| Meta smoke script (`npm run smoke:meta`) | Live Meta calls have **not** been run yet (no key configured) |
+| Meta smoke script (`npm run smoke:meta`), verified against the live API | Muse/SAM wired into the product workflow |
 
 ## Run locally
 
@@ -79,6 +79,10 @@ docs/                architecture and assumptions
 - Uses Meta's Model API: Muse Spark 1.3 and SAM 3.1 (https://dev.meta.ai). SAM output
   is parsed with Meta's [`@meta-sam/parser`](https://www.npmjs.com/package/@meta-sam/parser)
   (SAM License).
+- Sample photo `apps/web/public/samples/hostel-twin-room.jpg`: "Twin room in a German youth
+  hostel with single beds and wardrobe A" by Profpcde,
+  [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Twin_room_in_a_German_youth_hostel_with_single_beds_and_wardrobe_A.jpg),
+  CC0 1.0 (1280 px copy). Used as the consented sample for live SAM.
 - Reference dimensions mentioned in the UI (e.g. a 60 in / 152.4 cm turning circle) come
   from the U.S. Access Board guides. They are user-editable references, not compliance checks.
 

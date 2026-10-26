@@ -82,6 +82,14 @@ The web app validates user-edited/imported scenarios with Zod
   (`parseImageStream`, `recordsOfKind`, `decodeMaskToRaster`). Zero records is a
   valid "no matches".
 
+Live-verified 2026-10-26 with `npm run smoke:meta`:
+- Muse: `chat.completions.create` with `response_format.json_schema` returned schema-valid JSON
+  (`{"locked_object_ids":["bed"],"required_destination_ids":["desk-approach"],"route_width_cm":null}`).
+  It used about 600 reasoning tokens for a short prompt, so expect noticeable latency.
+- SAM: `responses.create({stream: true, metadata: {mask_encoding: "one_bit"}})` with a base64 JPEG
+  data URL. The parser outcome was `completed` with 0 diagnostics. On the CC0 sample photo, "bed" gave
+  2 matches and "desk" gave 1, and the box coordinates line up with the photo.
+
 ## Deliberate simplifications
 
 - Axis-aligned rectangular room and furniture only.
