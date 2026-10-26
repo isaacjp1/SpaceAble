@@ -19,7 +19,7 @@ const SNAP = 5;
 
 export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onSelect, onDrag, onKey }: Props) {
   const svg = useRef<SVGSVGElement>(null);
-  const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
+  const drag = useRef<{ id: string; x0: number; y0: number; px: number; py: number } | null>(null);
   const { width_cm: W, height_cm: H } = scenario.room;
   const pad = Math.max(W, H) * 0.12;
   const fs = Math.max(W, H) / 38;
@@ -34,14 +34,16 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
     e.stopPropagation();
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     const p = world(e);
-    drag.current = { id, dx: p.x - x, dy: p.y - y };
+    drag.current = { id, x0: x, y0: y, px: p.x, py: p.y };
     onSelect(id);
   };
   const move = (e: React.PointerEvent) => {
     if (!drag.current) return;
+    const { id, x0, y0, px, py } = drag.current;
     const p = world(e);
+    // snap the displacement, not the position: a click never moves a piece off its typed value
     const snap = (v: number) => (e.altKey ? Math.round(v) : Math.round(v / SNAP) * SNAP);
-    onDrag(drag.current.id, snap(p.x - drag.current.dx), snap(p.y - drag.current.dy));
+    onDrag(id, x0 + snap(p.x - px), y0 + snap(p.y - py));
   };
 
   return (

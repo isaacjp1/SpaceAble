@@ -49,7 +49,7 @@ online and whether a key is configured. It never shows the key itself.
 ```bash
 cd services/planner && pytest -q && ruff check .        # geometry, routing, API contract
 cd apps/web && npm run test && npm run lint && npm run typecheck
-cd apps/web && npx playwright install chromium && npm run test:e2e   # browser flow, uses both services
+cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # browser flow, uses both services
 cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed  # REAL, billed Meta calls
 ```
 

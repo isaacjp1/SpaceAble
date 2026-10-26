@@ -8,6 +8,14 @@ test("sample bedroom fails for the dresser, then passes after the user moves it"
   await expect(page.getByText("Does not pass the configured checks")).toBeVisible();
   await expect(page.getByText("Approach zone for desk-approach overlaps dresser.")).toBeVisible();
 
+  // clicking (selecting) a piece is not an edit, so results must stay current
+  const bed = (await page.getByRole("button", { name: /^Bed, 150 by 200 cm/ }).boundingBox())!;
+  await page.mouse.move(bed.x + 40, bed.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(bed.x + 41, bed.y + 41);
+  await page.mouse.up();
+  await expect(page.getByText("The layout changed since this analysis")).toHaveCount(0);
+
   // keyboard/inspector path (dragging is not the only input method)
   await page.getByRole("button", { name: "Dresser", exact: true }).click();
   const y = page.getByLabel("Y (top edge)");

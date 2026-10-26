@@ -41,7 +41,8 @@ validator's numbers. The browser draws whatever geometry the planner returns.
 | Containment | footprint within room rectangle, ε = 1e-6 cm |
 | Collision | interior overlap in both axes > ε; shared edges are allowed |
 | Fixed obstacles | furniture with `movable: false` (no separate type) |
-| Door | `clear_width_cm ≥ door_min_clear_width_cm`, checked separately from route width |
+| Door | start door only (`requirements.start_door_id`, default first door): `clear_width_cm ≥ door_min_clear_width_cm`, checked separately from route width |
+| Required destinations | `requirements.required_destination_ids` is authoritative. `Destination.required` is a mirror the UI keeps in sync; the planner ignores it. Non-required destinations are still analysed and reported as optional |
 | Route start | door midpoint pushed inward by `r + 1 cm` (clamped along the wall). The route width threshold is never applied across the doorway. `entry_anchor` is informational only |
 | Agent | disk of radius `r = route_width_cm / 2` (translation only, no kinematics) |
 | Free centers | `room.buffer(-r) − union(footprints).buffer(r')`, where `r' = r / cos(π/4q)` so the polygonal arc approximation circumscribes the true disk (conservative) |

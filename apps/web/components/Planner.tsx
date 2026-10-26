@@ -43,11 +43,12 @@ export function Planner() {
       return next;
     });
 
-  const moveTo = (id: string, x: number, y: number) =>
-    update((s) => {
-      const i = s.objects.findIndex((o) => o.id === id);
-      s.objects[i] = clampToRoom({ ...s.objects[i], x_cm: x, y_cm: y }, s.room);
-    });
+  const moveTo = (id: string, x: number, y: number) => {
+    const o = scenario.objects.find((p) => p.id === id)!;
+    const moved = clampToRoom({ ...o, x_cm: x, y_cm: y }, scenario.room);
+    if (moved.x_cm === o.x_cm && moved.y_cm === o.y_cm) return; // no-op: keep results fresh
+    update((s) => { s.objects[s.objects.findIndex((p) => p.id === id)] = moved; });
+  };
   const rotateObj = (id: string) =>
     update((s) => {
       const i = s.objects.findIndex((o) => o.id === id);

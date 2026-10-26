@@ -223,9 +223,10 @@ export function RequirementsPanel({ scenario, update }: { scenario: RoomScenario
             return (
               <li key={d.id} className="rounded border border-slate-200 p-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Toggle label={d.id} checked={required} onChange={(v) => set({
-                    required_destination_ids: v ? [...req.required_destination_ids, d.id]
-                      : req.required_destination_ids.filter((i) => i !== d.id),
+                  <Toggle label={d.id} checked={required} onChange={(v) => update((s) => {
+                    const ids = s.requirements.required_destination_ids.filter((i) => i !== d.id);
+                    s.requirements.required_destination_ids = v ? [...ids, d.id] : ids;
+                    s.destinations.find((x) => x.id === d.id)!.required = v; // keep the mirror in sync
                   })} />
                   <button className={button} aria-label={`Remove ${d.id}`} onClick={() => update((s) => {
                     s.destinations = s.destinations.filter((x) => x.id !== d.id);
