@@ -46,10 +46,13 @@ export function AlternativesPanel({ result, stale, scenario, previewId, onPrevie
         </p>
       )}
       <div className="rounded border border-slate-200 bg-slate-50 p-2">
-        <p className="text-sm font-semibold text-slate-800">{HEADLINE[result.status]}</p>
+        <p className="text-sm font-semibold text-slate-800">
+          {result.status === "discretized_search_infeasible" && s.candidates_tested === 0
+            ? "Moving furniture cannot fix this" : HEADLINE[result.status]}
+        </p>
         <p className="mt-1 text-xs text-slate-600">{result.message}</p>
         <p className="mt-1 text-xs tabular-nums text-slate-500">
-          Validated {s.candidates_tested} of {s.combinations_considered} candidate layouts in {s.elapsed_s} s
+          Ran the validator on {s.candidates_tested} of {s.combinations_considered} combinations considered, in {s.elapsed_s} s
           (limit {s.time_limit_s} s, {s.grid_spacing_cm} cm grid{s.exhaustive ? ", every combination checked" : ""}).
         </p>
       </div>

@@ -80,8 +80,10 @@ turning diameter, the message says so explicitly.
    (`grid_spacing_cm`, default 20) plus wall-flush positions, at 0/90° (all four orientations
    when the object has a required approach zone, because its side turns with it). A placement
    is dropped if it overlaps fixed furniture or a fixed approach zone, sits on the entry disk,
-   or puts its own approach zone outside the room or on fixed furniture. The list is sorted by
-   cost and capped at 120.
+   or puts its own approach zone outside the room, on fixed furniture, or on the entry disk.
+   The last rule keeps a person using the zone from standing in the doorway. It is a
+   proposal rule only; `analyze` does not check it. The list is sorted by
+   cost and capped at 120 (`MAX_CANDIDATES_PER_OBJECT`, a module constant, not an API option).
 5. **Search.** A heap over the product of the lists visits combinations in increasing total
    cost, moving at most 3 objects. Cheap rejections come first: movers overlapping each
    other or each other's approach zones, then a polygon check that the entry's free-space

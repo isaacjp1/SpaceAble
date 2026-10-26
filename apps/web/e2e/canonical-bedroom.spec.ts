@@ -63,7 +63,7 @@ test("optimize returns verified alternatives that can be previewed and applied",
 
   await page.getByRole("button", { name: "Optimize" }).click();
   await expect(page.getByText("Verified alternatives", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Validated \d+ of \d+ candidate layouts/)).toBeVisible();
+  await expect(page.getByText(/Ran the validator on \d+ of \d+ combinations/)).toBeVisible();
   // the optimizer's baseline is the same validator's verdict on the current layout
   await expect(page.getByText("Does not pass the configured checks")).toBeVisible();
 

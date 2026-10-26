@@ -90,6 +90,8 @@ def _candidates(o, scenario, fixed_rects, fixed_zones, req_dests, start, r, grid
                 if (any(overlaps(c.rect, f) for f in fixed_rects)
                         or any(overlaps(c.rect, z) for z in fixed_zones)
                         or c.rect.distance(Point(start)) <= r  # would sit on the entry disk
+                        # someone using this approach zone would stand in the doorway
+                        or any(z.distance(Point(start)) < r for z in c.approach)
                         or any(not inside(z, room) or any(overlaps(z, f) for f in fixed_rects)
                                for z in c.approach)):
                     continue
