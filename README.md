@@ -17,10 +17,11 @@ Progress is tracked in `TASKS.md`.
 
 | Works now | Not yet |
 | --- | --- |
-| 2D measured room editor (drag, arrow keys, numeric fields, rotate, lock, add/delete) | Optimizer |
-| Planner `analyze`: containment, collisions, door width, approach zones, clearance-aware routes, turning circle | Muse/SAM in the UI |
-| Verified route overlay, reachable area, failed-object highlighting, stale-result warning | Before/after, print view, benchmark |
-| Save/load JSON, sample-room reset | Deployment |
+| 2D measured room editor (drag, arrow keys, numeric fields, rotate, lock, add/delete) | Muse/SAM in the UI |
+| Planner `analyze`: containment, collisions, door width, approach zones, clearance-aware routes, turning circle | Before/after split view, print view, benchmark |
+| Planner `optimize`: up to 3 diverse alternatives, each re-validated; honest no-solution statuses | Deployment |
+| Verified route overlay, reachable area, failed-object highlighting, alternative preview with arrows | |
+| Save/load JSON, sample-room reset | |
 | Meta smoke script (`npm run smoke:meta`), verified against the live API | Muse/SAM wired into the product workflow |
 
 ## Run locally

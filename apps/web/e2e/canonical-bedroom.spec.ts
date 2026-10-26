@@ -56,3 +56,29 @@ test("furniture moves by drag and arrow keys, rotates, and can be deleted", asyn
   await expect(page.getByRole("button", { name: /^Desk,/ })).toHaveCount(0);
   await expect(page.getByText("desk-approach")).toHaveCount(0); // its approach zone went with it
 });
+
+test("optimize returns verified alternatives that can be previewed and applied", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByText("Planner: online")).toBeVisible();
+
+  await page.getByRole("button", { name: "Optimize" }).click();
+  await expect(page.getByText("Verified alternatives", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Validated \d+ of \d+ candidate layouts/)).toBeVisible();
+  // the optimizer's baseline is the same validator's verdict on the current layout
+  await expect(page.getByText("Does not pass the configured checks")).toBeVisible();
+
+  const first = page.getByRole("listitem").filter({ hasText: "Option 1" });
+  await expect(first.getByText(/moved \d+(\.\d)? cm/)).toBeVisible();
+  await first.getByRole("button", { name: "Preview" }).click();
+  await expect(page.getByText("Previewing option 1 (read-only)")).toBeVisible();
+  await expect(page.locator("text=(before)").first()).toBeVisible(); // ghost of the old spot
+  await expect(page.locator('line[marker-end="url(#arrow)"]').first()).toBeVisible();
+  await expect(page.getByText("Passes the configured geometric checks")).toBeVisible();
+
+  await page.getByRole("button", { name: "Use this layout" }).first().click();
+  await expect(page.getByText("Previewing option 1")).toHaveCount(0);
+  // recompute from scratch on the applied layout
+  await page.getByRole("button", { name: "Analyze" }).click();
+  await expect(page.getByText("Passes the configured geometric checks")).toBeVisible();
+  await expect(page.getByText("The layout changed since this analysis")).toHaveCount(0);
+});

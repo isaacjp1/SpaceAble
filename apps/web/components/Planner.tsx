@@ -2,8 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import fixture from "../../../shared/fixtures/canonical-bedroom.json";
-import { clampToRoom, rotate } from "@/lib/geometry-ui";
-import { RoomScenarioSchema, type ApiError, type RoomScenario, type ValidationResult } from "@/lib/schema";
+import { applyMoves, clampToRoom, rotate } from "@/lib/geometry-ui";
+import {
+  RoomScenarioSchema, type Alternative, type ApiError, type OptimizationResult, type RoomScenario,
+  type ValidationResult,
+} from "@/lib/schema";
+import { AlternativesPanel } from "./AlternativesPanel";
 import { FurniturePanel, RequirementsPanel, RoomPanel, Section, type Update } from "./Panels";
 import { RoomCanvas } from "./RoomCanvas";
 import { DISCLAIMER, ValidationPanel } from "./ValidationPanel";
@@ -12,7 +16,10 @@ const SAMPLE = RoomScenarioSchema.parse(fixture);
 
 type Health = { planner: "ok" | "unreachable"; meta_configured: boolean };
 type Analysis = { scenario: RoomScenario; result: ValidationResult };
+type Optimization = { scenario: RoomScenario; result: OptimizationResult };
 
+const primary =
+  "rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-60";
 const button =
   "rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-500";
 
@@ -20,7 +27,10 @@ export function Planner() {
   const [scenario, setScenario] = useState<RoomScenario>(SAMPLE);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [optimization, setOptimization] = useState<Optimization | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [timeLimit, setTimeLimit] = useState(10);
+  const [busy, setBusy] = useState<"analyze" | "optimize" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -35,6 +45,18 @@ export function Planner() {
   const result = analysis?.result ?? null;
   const selected = scenario.objects.find((o) => o.id === selectedId) ?? null;
   const issues = RoomScenarioSchema.safeParse(scenario);
+  const optStale = optimization !== null && optimization.scenario !== scenario;
+  const preview = optStale ? undefined : optimization?.result.alternatives.find((a) => a.id === previewId);
+  const previewIndex = preview ? optimization!.result.alternatives.indexOf(preview) + 1 : 0;
+  const ghosts = preview ? scenario.objects.filter((o) => preview.moves.some((m) => m.object_id === o.id)) : [];
+
+  const clearResults = () => {
+    setAnalysis(null);
+    setOptimization(null);
+    setPreviewId(null);
+    setSelectedId(null);
+    setError(null);
+  };
 
   const update: Update = (fn) =>
     setScenario((s) => {
@@ -78,24 +100,50 @@ export function Planner() {
     else if (e.key === "Delete" || e.key === "Backspace") deleteObj(id);
   };
 
-  const analyze = async () => {
-    const sent = scenario;
-    setBusy(true);
+  const call = async <T,>(kind: "analyze" | "optimize", body: object): Promise<T | null> => {
+    setBusy(kind);
     setError(null);
     try {
-      const res = await fetch("/api/planner/analyze", {
+      const res = await fetch(`/api/planner/${kind}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ scenario: sent }),
+        body: JSON.stringify(body),
       });
-      const body = await res.json();
-      if (!res.ok) setError((body as ApiError).error?.message ?? `Planner error ${res.status}`);
-      else setAnalysis({ scenario: sent, result: body });
+      const data = await res.json();
+      if (res.ok) return data as T;
+      setError((data as ApiError).error?.message ?? `Planner error ${res.status}`);
     } catch {
       setError("Could not reach the SpaceAble server.");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
+    return null;
+  };
+
+  const analyze = async () => {
+    const sent = scenario;
+    const result = await call<ValidationResult>("analyze", { scenario: sent });
+    if (result) setAnalysis({ scenario: sent, result });
+  };
+
+  const optimize = async () => {
+    const sent = scenario;
+    const result = await call<OptimizationResult>("optimize", {
+      scenario: sent, options: { time_limit_s: timeLimit },
+    });
+    if (!result) return;
+    setOptimization({ scenario: sent, result });
+    setAnalysis({ scenario: sent, result: result.baseline }); // same validator, same layout
+    setPreviewId(null);
+  };
+
+  const applyAlternative = (alt: Alternative) => {
+    const next = applyMoves(scenario, alt.moves);
+    setScenario(next);
+    // alt.validation is the planner's analyze() of exactly this layout
+    setAnalysis({ scenario: next, result: alt.validation });
+    setOptimization(null);
+    setPreviewId(null);
   };
 
   const exportJson = () => {
@@ -122,9 +170,7 @@ export function Planner() {
         return;
       }
       setScenario(parsed.data);
-      setAnalysis(null);
-      setSelectedId(null);
-      setError(null);
+      clearResults();
     } catch {
       setError(`Could not load ${file.name}: not valid JSON.`);
     }
@@ -141,7 +187,7 @@ export function Planner() {
           <button className={button} onClick={() => fileInput.current?.click()}>Load JSON</button>
           <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" aria-hidden="true"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) importJson(f); e.target.value = ""; }} />
-          <button className={button} onClick={() => { setScenario(SAMPLE); setAnalysis(null); setSelectedId(null); setError(null); }}>
+          <button className={button} onClick={() => { setScenario(SAMPLE); clearResults(); }}>
             Reset sample
           </button>
         </div>
@@ -155,10 +201,21 @@ export function Planner() {
         </aside>
 
         <main className="flex min-h-[420px] flex-col gap-2 p-3">
+          {preview && (
+            <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
+              <span>Previewing option {previewIndex} (read-only). Outlines show where moved pieces were.</span>
+              <span className="ml-auto flex gap-2">
+                <button className={button} onClick={() => applyAlternative(preview)}>Use this layout</button>
+                <button className={button} onClick={() => setPreviewId(null)}>Back to editing</button>
+              </span>
+            </div>
+          )}
           <div className="min-h-0 flex-1 rounded-lg border border-slate-200 bg-slate-50">
-            <RoomCanvas scenario={scenario} result={result} stale={stale} selectedId={selectedId}
-              lockedIds={scenario.requirements.locked_object_ids}
-              onSelect={setSelectedId} onDrag={moveTo} onKey={onKey} />
+            <RoomCanvas scenario={preview ? applyMoves(scenario, preview.moves) : scenario}
+              result={preview ? preview.validation : result} stale={preview ? false : stale}
+              selectedId={selectedId} lockedIds={scenario.requirements.locked_object_ids}
+              onSelect={setSelectedId} onDrag={moveTo} onKey={onKey}
+              ghosts={ghosts} readOnly={Boolean(preview)} />
           </div>
           <Legend />
         </main>
@@ -171,12 +228,27 @@ export function Planner() {
                 Fix before analyzing: {issues.error.issues[0].message}
               </p>
             )}
-            <button onClick={analyze} disabled={busy}
-              className="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-60">
-              {busy ? "Analyzing…" : "Analyze"}
-            </button>
+            <div className="flex flex-wrap items-end gap-2">
+              <button onClick={analyze} disabled={busy !== null} className={primary}>
+                {busy === "analyze" ? "Analyzing…" : "Analyze"}
+              </button>
+              <button onClick={optimize} disabled={busy !== null} className={primary}>
+                {busy === "optimize" ? "Searching…" : "Optimize"}
+              </button>
+              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+                Search time limit
+                <select value={timeLimit} onChange={(e) => setTimeLimit(Number(e.target.value))}
+                  className="rounded border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900">
+                  {[5, 10, 20].map((t) => <option key={t} value={t}>{t} s</option>)}
+                </select>
+              </label>
+            </div>
             {error && <p role="alert" className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-800">{error}</p>}
-            <ValidationPanel result={result} stale={stale} />
+            {optimization && (
+              <AlternativesPanel result={optimization.result} stale={optStale} scenario={scenario}
+                previewId={preview?.id ?? null} onPreview={setPreviewId} onUse={applyAlternative} />
+            )}
+            <ValidationPanel result={preview ? preview.validation : result} stale={preview ? false : stale} />
           </Section>
         </aside>
       </div>

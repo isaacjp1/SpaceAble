@@ -1,5 +1,5 @@
 // Display-only helpers. Pass/fail always comes from the planner.
-import type { Furniture, RoomScenario } from "./schema";
+import type { Furniture, Move, RoomScenario } from "./schema";
 
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
@@ -29,3 +29,15 @@ export function rotate(o: Furniture, room: RoomScenario["room"]): Furniture {
 }
 
 export const cmToIn = (cm: number) => cm / 2.54;
+
+/** The scenario with an alternative's moves applied (mirrors the planner's apply_layout). */
+export function applyMoves(s: RoomScenario, moves: Move[]): RoomScenario {
+  const to = new Map(moves.map((m) => [m.object_id, m]));
+  return {
+    ...s,
+    objects: s.objects.map((o) => {
+      const m = to.get(o.id);
+      return m ? { ...o, x_cm: m.to_x_cm, y_cm: m.to_y_cm, rotation_deg: m.to_rotation_deg as Furniture["rotation_deg"] } : o;
+    }),
+  };
+}

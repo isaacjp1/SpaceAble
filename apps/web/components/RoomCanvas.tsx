@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { dims } from "@/lib/geometry-ui";
-import type { Door, RoomScenario, ValidationResult } from "@/lib/schema";
+import type { Door, Furniture, RoomScenario, ValidationResult } from "@/lib/schema";
 
 type Props = {
   scenario: RoomScenario;
@@ -13,11 +13,15 @@ type Props = {
   onSelect: (id: string | null) => void;
   onDrag: (id: string, x: number, y: number) => void;
   onKey: (id: string, e: React.KeyboardEvent) => void;
+  /** Original placements of moved pieces, drawn as outlines with arrows to the new ones. */
+  ghosts?: Furniture[];
+  readOnly?: boolean;
 };
 
 const SNAP = 5;
 
-export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onSelect, onDrag, onKey }: Props) {
+export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onSelect, onDrag, onKey,
+  ghosts = [], readOnly = false }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<{ id: string; x0: number; y0: number; px: number; py: number } | null>(null);
   const { width_cm: W, height_cm: H } = scenario.room;
@@ -25,13 +29,14 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
   const fs = Math.max(W, H) / 38;
   const live = result && !stale ? result : null;
   const failing = new Set(
-    (live?.checks ?? []).filter((c) => c.status === "fail").flatMap((c) => c.object_ids));
+    (live?.checks ?? []).filter((c) => c.required && c.status === "fail").flatMap((c) => c.object_ids));
 
   const world = (e: React.PointerEvent) =>
     new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.current!.getScreenCTM()!.inverse());
 
   const down = (id: string, x: number, y: number) => (e: React.PointerEvent) => {
     e.stopPropagation();
+    if (readOnly) return onSelect(id);
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     const p = world(e);
     drag.current = { id, x0: x, y0: y, px: p.x, py: p.y };
@@ -65,6 +70,9 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
           <rect width="100" height="100" fill="url(#grid20)" />
           <path d="M 100 0 L 0 0 0 100" fill="none" className="stroke-slate-300" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         </pattern>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" className="fill-indigo-700" />
+        </marker>
         <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <line x1="0" y1="0" x2="0" y2="8" className="stroke-red-500" strokeWidth="3" />
         </pattern>
@@ -108,6 +116,19 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
         ))}
       </g>
 
+      {/* where moved pieces used to be */}
+      {ghosts.map((g) => {
+        const { w, h } = dims(g);
+        return (
+          <g key={`ghost-${g.id}`} aria-hidden="true" pointerEvents="none">
+            <rect x={g.x_cm} y={g.y_cm} width={w} height={h} rx={2} className="fill-slate-200/50 stroke-slate-400"
+              strokeDasharray="6 4" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+            <text x={g.x_cm + w / 2} y={g.y_cm + h / 2} textAnchor="middle" fontSize={fs * 0.75}
+              className="fill-slate-500">{g.label} (before)</text>
+          </g>
+        );
+      })}
+
       {/* furniture */}
       {scenario.objects.map((o) => {
         const { w, h } = dims(o);
@@ -117,10 +138,10 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
         return (
           <g key={o.id} tabIndex={0} role="button" aria-pressed={selected}
             aria-label={`${o.label}, ${w} by ${h} cm at x ${o.x_cm}, y ${o.y_cm}${locked ? ", locked" : ""}${!o.movable ? ", fixed" : ""}${bad ? ", involved in a failed check" : ""}. Arrow keys move, R rotates, Delete removes.`}
-            className="cursor-move outline-none [&:focus-visible>rect:first-child]:stroke-indigo-500"
+            className={`${readOnly ? "cursor-default" : "cursor-move"} outline-none [&:focus-visible>rect:first-child]:stroke-indigo-500`}
             onPointerDown={down(o.id, o.x_cm, o.y_cm)}
             onFocus={() => onSelect(o.id)}
-            onKeyDown={(e) => onKey(o.id, e)}>
+            onKeyDown={(e) => !readOnly && onKey(o.id, e)}>
             <rect x={o.x_cm} y={o.y_cm} width={w} height={h} rx={2}
               className={`${o.movable ? "fill-amber-100" : "fill-stone-300"} ${selected ? "stroke-indigo-600" : bad ? "stroke-red-600" : "stroke-stone-500"}`}
               strokeWidth={selected || bad ? 3 : 1.5} vectorEffect="non-scaling-stroke"
@@ -135,6 +156,17 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
               {w}×{h}{o.confirmed ? "" : " (unconfirmed)"}
             </text>
           </g>
+        );
+      })}
+
+      {ghosts.map((g) => {
+        const now = scenario.objects.find((o) => o.id === g.id);
+        if (!now) return null;
+        const a = dims(g), b = dims(now);
+        return (
+          <line key={`arrow-${g.id}`} x1={g.x_cm + a.w / 2} y1={g.y_cm + a.h / 2}
+            x2={now.x_cm + b.w / 2} y2={now.y_cm + b.h / 2} className="stroke-indigo-700"
+            strokeWidth="2.5" vectorEffect="non-scaling-stroke" markerEnd="url(#arrow)" pointerEvents="none" />
         );
       })}
 

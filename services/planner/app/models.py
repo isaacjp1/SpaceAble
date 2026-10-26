@@ -156,6 +156,17 @@ class AnalyzeRequest(Model):
     options: AnalyzeOptions = Field(default_factory=AnalyzeOptions)
 
 
+class OptimizeOptions(Model):
+    time_limit_s: float = Field(10.0, ge=0.5, le=30.0)
+    grid_spacing_cm: float = Field(20.0, ge=10.0, le=50.0)
+    max_alternatives: int = Field(3, ge=1, le=3)
+
+
+class OptimizeRequest(Model):
+    scenario: RoomScenario
+    options: OptimizeOptions = Field(default_factory=OptimizeOptions)
+
+
 # ---- results ---------------------------------------------------------------
 
 
@@ -196,3 +207,51 @@ class ValidationResult(Model):
     warnings: list[str] = Field(default_factory=list)
     grid_cm: float
     elapsed_ms: float
+
+
+class Move(Model):
+    object_id: str
+    from_x_cm: float
+    from_y_cm: float
+    from_rotation_deg: int
+    to_x_cm: float
+    to_y_cm: float
+    to_rotation_deg: int
+    distance_cm: float  # footprint centre to footprint centre
+
+
+class Cost(Model):
+    moved_objects: int
+    displacement_cm: float
+    route_length_cm: float  # sum over required routes
+    total_score: float  # lower is better; weights are engineering defaults (optimize.py)
+
+
+class Alternative(Model):
+    id: str
+    layout: Layout  # positions of moved objects only; use as analyze layoutOverride
+    moves: list[Move]
+    validation: ValidationResult  # independent analyze() of exactly this layout
+    cost: Cost
+
+
+class SearchInfo(Model):
+    grid_spacing_cm: float
+    time_limit_s: float
+    elapsed_s: float
+    combinations_considered: int
+    candidates_tested: int  # layouts that reached the full validator
+    exhaustive: bool  # every discrete combination was visited (no cap, no timeout)
+
+
+OptimizeStatus = Literal["solutions_found", "no_solution_found_within_budget",
+                         "discretized_search_infeasible", "needs_input", "error"]
+
+
+class OptimizationResult(Model):
+    status: OptimizeStatus
+    message: str
+    alternatives: list[Alternative] = Field(default_factory=list)
+    baseline: ValidationResult  # analyze() of the submitted layout
+    search: SearchInfo
+    warnings: list[str] = Field(default_factory=list)

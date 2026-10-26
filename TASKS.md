@@ -6,12 +6,12 @@ Boxes are ticked only after the relevant test or run has actually passed.
 
 - [x] 1. Measured 2D bedroom plan: grid, scale, furniture, door, dimensions
 - [x] 2. Prebuilt failing scenario + editable room/furniture
-- [ ] 3. Add / select / drag / rotate / lock / delete furniture; no overlaps accepted
-  (editing done + e2e-tested; "accepted layouts" arrive with the optimizer)
+- [x] 3. Add / select / drag / rotate / lock / delete furniture; no overlaps accepted
+  (the editor allows overlaps but flags them; every optimizer alternative passes the collision check)
 - [ ] 4. Door start, target zones, route width, optional turning diameter
   (all except picking among several doors: the UI edits one door, `start_door_id` exists in the schema)
 - [x] 5. Deterministic `analyze` with structured evidence
-- [ ] 6. Deterministic `optimize` returning 1–3 validated alternatives (or honest no-solution)
+- [x] 6. Deterministic `optimize` returning 1–3 validated alternatives (or honest no-solution)
 - [ ] 7. Muse Spark 1.3 text → editable constraints; evidence-grounded explanation
 - [ ] 8. SAM 3.1 photo masks/boxes with user association to plan objects
 - [ ] 9. Before/after, failed-check overlays, export JSON, printable summary
@@ -38,11 +38,12 @@ Boxes are ticked only after the relevant test or run has actually passed.
 
 ## Optimization
 
-- [ ] Candidate generator + static filter
-- [ ] Bounded search / CP-SAT with no-good cuts
-- [ ] Every alternative re-validated by the same validator
-- [ ] Diverse ranked alternatives, budget + warnings reported
-- [ ] Performance + impossible-case tests (matrix 5, 14–17)
+- [x] Candidate generator + static filter
+- [x] Bounded best-first search (CP-SAT not used; same visit order as CP-SAT + no-good cuts, see architecture.md)
+- [x] Every alternative re-validated by the same validator (test re-runs analyze on each returned layout)
+- [x] Diverse ranked alternatives, budget + warnings reported
+- [x] Performance + impossible-case tests (matrix 5, 14–17)
+- [x] UI: Optimize + time limit, alternative cards, preview with before-outlines and arrows, use (Playwright)
 
 ## Meta AI features
 

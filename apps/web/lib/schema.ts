@@ -147,3 +147,38 @@ export interface ValidationResult {
 export interface ApiError {
   error: { code: string; message: string; details?: unknown; retryable: boolean };
 }
+
+export interface Move {
+  object_id: string;
+  from_x_cm: number;
+  from_y_cm: number;
+  from_rotation_deg: number;
+  to_x_cm: number;
+  to_y_cm: number;
+  to_rotation_deg: number;
+  distance_cm: number;
+}
+
+export interface Alternative {
+  id: string;
+  layout: Layout;
+  moves: Move[];
+  validation: ValidationResult;
+  cost: { moved_objects: number; displacement_cm: number; route_length_cm: number; total_score: number };
+}
+
+export type OptimizeStatus =
+  | "solutions_found" | "no_solution_found_within_budget" | "discretized_search_infeasible"
+  | "needs_input" | "error";
+
+export interface OptimizationResult {
+  status: OptimizeStatus;
+  message: string;
+  alternatives: Alternative[];
+  baseline: ValidationResult;
+  search: {
+    grid_spacing_cm: number; time_limit_s: number; elapsed_s: number;
+    combinations_considered: number; candidates_tested: number; exhaustive: boolean;
+  };
+  warnings: string[];
+}

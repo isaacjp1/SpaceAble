@@ -17,6 +17,7 @@ FastAPI planner (Python 3.12, Pydantic v2, Shapely 2)
    geometry.py  footprints, containment, collision, approach zones
    routing.py   free-center space, A*, smoothing, segment verification, turning circle
    analyze.py   builds the typed ValidationResult
+   optimize.py  candidate placements + bounded best-first search, every result re-validated
    main.py      HTTP + error contract
 ```
 
@@ -62,6 +63,55 @@ grid", never as physically impossible. If the exact polygon components say the
 start and approach zone are connected but the grid found no path, a warning
 suggests a finer grid. If the room itself is too small for the route width or
 turning diameter, the message says so explicitly.
+
+## Optimizer
+
+1. **Run analyze on the submitted layout** (the `baseline`). If it passes, the current
+   layout is the only alternative returned: nothing is moved for the sake of it.
+   Required `needs_input` checks give `needs_input`.
+2. **Movers** are `movable` objects that are not in `locked_object_ids`. If there are none,
+   the result is `discretized_search_infeasible` with a hint.
+3. **Monotonicity pre-check.** Analyze the room with every mover (and its own
+   destinations) removed. Removing furniture only enlarges free space, so a required check
+   that still fails cannot be fixed by any placement of the movers. Examples are a door
+   narrower than the minimum, or a turning circle larger than the room. The reply quotes the
+   failing checks.
+4. **Candidates per mover.** The list starts with "stay" (cost 0). Then come grid placements
+   (`grid_spacing_cm`, default 20) plus wall-flush positions, at 0/90° (all four orientations
+   when the object has a required approach zone, because its side turns with it). A placement
+   is dropped if it overlaps fixed furniture or a fixed approach zone, sits on the entry disk,
+   or puts its own approach zone outside the room or on fixed furniture. The list is sorted by
+   cost and capped at 120.
+5. **Search.** A heap over the product of the lists visits combinations in increasing total
+   cost, moving at most 3 objects. Cheap rejections come first: movers overlapping each
+   other or each other's approach zones, then a polygon check that the entry's free-space
+   component touches every target. Neither can accept a layout; only `analyze` can. The
+   search stops after `max_alternatives` diverse passes or at `time_limit_s`.
+6. **Statuses.** The search is `exhaustive` only when it emptied the heap, hit no time limit,
+   truncated no candidate list and had at most 3 movers. Only then can it report
+   `discretized_search_infeasible`, worded as "among the grid placements tried". Otherwise
+   it reports `no_solution_found_within_budget`. Results are deterministic whenever the
+   search finishes before the time limit.
+
+**CP-SAT is not used.** CP-SAT with no-good cuts over binary placement
+variables visits collision-free combinations in increasing linear cost. The heap
+enumeration visits them in the same order, with less code and no OR-Tools dependency.
+The validator stays the authority either way.
+
+Cost weights in `optimize.py` are initial engineering defaults, not accessibility science.
+They only rank layouts that already passed:
+
+| Term | Weight |
+| --- | --- |
+| each moved object | 100 |
+| centre displacement | 0.2 per cm |
+| orientation changed | 10 |
+| moved piece touches no wall | 20 (a realism preference we added; never a requirement) |
+| required route length | 0.05 per cm (after validation) |
+
+Alternatives that move the same pieces to the same orientations within 60 cm of each other
+count as near-duplicates and are dropped. `optimization_profile: max_clearance` is not
+implemented yet; it returns a warning and ranks by minimal changes.
 
 ## Data contracts
 

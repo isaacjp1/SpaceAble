@@ -9,7 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .analyze import analyze
-from .models import AnalyzeRequest, ValidationResult, apply_layout
+from .models import (
+    AnalyzeRequest,
+    OptimizationResult,
+    OptimizeRequest,
+    ValidationResult,
+    apply_layout,
+)
+from .optimize import optimize
 
 MAX_BODY_BYTES = 512 * 1024
 
@@ -66,3 +73,8 @@ def analyze_endpoint(body: AnalyzeRequest):
         except ValueError as e:
             return error(422, "VALIDATION_ERROR", str(e))
     return analyze(scenario, body.options.grid_cm)
+
+
+@app.post("/v1/planner/optimize", response_model=OptimizationResult)
+def optimize_endpoint(body: OptimizeRequest):
+    return optimize(body.scenario, body.options)
