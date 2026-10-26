@@ -8,9 +8,9 @@ Next.js API routes  (server-only MODEL_API_KEY)
    ├─ /api/health              → planner reachability + whether Meta is configured
    ├─ /api/planner/analyze     → FastAPI POST /v1/planner/analyze
    ├─ /api/planner/optimize    → FastAPI POST /v1/planner/optimize
-   ├─ /api/ai/parse-request    → Muse Spark 1.3, json_schema output
-   ├─ /api/ai/explain          → Muse Spark 1.3, evidence-only
-   └─ /api/ai/segment          → SAM 3.1 + @meta-sam/parser
+   ├─ /api/ai/parse-request    → Muse Spark 1.3, json_schema output (proposal for review)
+   ├─ /api/ai/explain          → Muse Spark 1.3, evidence-only, grounding-checked
+   └─ /api/ai/segment          → SAM 3.1 + @meta-sam/parser (boxes + mask paths)
    ▼
 FastAPI planner (Python 3.12, Pydantic v2, Shapely 2)
    models.py    contracts + cross-reference validation
@@ -141,6 +141,31 @@ Live-verified 2026-10-26 with `npm run smoke:meta`:
 - SAM: `responses.create({stream: true, metadata: {mask_encoding: "one_bit"}})` with a base64 JPEG
   data URL. The parser outcome was `completed` with 0 diagnostics. On the CC0 sample photo, "bed" gave
   2 matches and "desk" gave 1, and the box coordinates line up with the photo.
+
+### In the product
+
+| Route | What the model does | What stops it overreaching |
+| --- | --- | --- |
+| `parse-request` | Muse turns a sentence into `{locked_object_ids, required_destination_ids, route_width_cm, turning_diameter_cm, optimization_profile, clarifying_questions, unsupported_requests}` | The JSON schema has enums of the scenario's real IDs, and Zod re-validates the reply; unknown IDs are rejected (502, nothing applied). A width equal to the current value means "keep". A width when the text has no digits becomes a clarifying question instead of a value. The user edits and approves the proposal in a review form; nothing is applied automatically. The room title is never sent |
+| `explain` | Muse writes 3–5 sentences from the planner's evidence (checks, moves, assumptions) | `checkExplanation` rejects any number not in the evidence (±0.5 tolerance; integers ≤ 3 allowed as counts) and any sentence with a compliance, certification, guarantee or safety claim without a negation. A rejected draft is replaced by the deterministic template, with the reason shown. With no key or an upstream error the template is returned too, always labelled "Built-in explanation (no AI)" |
+| `segment` | SAM 3.1 segments 1–3 concepts, one request each, in parallel | The image type comes from its magic bytes (JPEG/PNG), at most 5 MB and 4096 px. The browser re-encodes the photo (max 1600 px), which drops EXIF/GPS. It is sent as a base64 data URL and never stored or logged. Detections only annotate the photo; the user links them to plan furniture, and "add as new" creates unmeasured (`confirmed: false`, `label_source: ai-inferred`) furniture |
+
+Errors follow the contract: no key gives 503 `META_NOT_CONFIGURED`, upstream 429 gives 429 `META_RATE_LIMITED`
+(retryable), and network, timeout or 5xx give `UPSTREAM_UNAVAILABLE`. There is also an in-memory limit of 20 AI
+requests per minute per IP. Only error class names are logged, never prompts, photos or replies. Tests mock
+Meta at the fetch layer; Playwright mocks `/api/ai/*`.
+
+Live-verified 2026-10-26 through the app routes (`npm run dev`, real key):
+- `parse-request`, "Keep my bed where it is, but make the route to my desk clearer." gave bed locked,
+  desk-approach required, both widths null (keep current), no questions, in 3.9 s.
+- `parse-request`, "…need 36 inches of clear width to reach my desk… leave the bed alone. Can you also check
+  if my doorway meets ADA?" gave `route_width_cm: 91.44`, bed locked, and `unsupported_requests: ["check if
+  doorway meets ADA"]`, in 6.6 s.
+- `reasoning_effort: "low"` is accepted. It cut parse latency from 22 s to 4–7 s, and explain stayed grounded.
+- `explain` on the canonical baseline vs option 1: four runs, all passed the grounding check (11–17 s).
+- `segment` on the CC0 sample with bed, desk and lamp, in 2.6 s total. bed: 2 boxes (0.57, 0.75). desk: 1 (0.88).
+  lamp: 2 (the wall sconces). All completed, with 0 dropped records. A later run also returned a
+  low-confidence second "desk" at the window, which is why the user confirms links.
 
 ## Deliberate simplifications
 

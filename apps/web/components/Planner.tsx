@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import fixture from "../../../shared/fixtures/canonical-bedroom.json";
+import { buildEvidence } from "@/lib/ai";
 import { applyMoves, clampToRoom, rotate } from "@/lib/geometry-ui";
 import {
   RoomScenarioSchema, type Alternative, type ApiError, type OptimizationResult, type RoomScenario,
   type ValidationResult,
 } from "@/lib/schema";
+import { type Explanation, ExplanationView, RequestPanel } from "./AiPanels";
 import { AlternativesPanel } from "./AlternativesPanel";
 import { FurniturePanel, RequirementsPanel, RoomPanel, Section, type Update } from "./Panels";
+import { PhotoPanel } from "./PhotoPanel";
 import { RoomCanvas } from "./RoomCanvas";
 import { DISCLAIMER, ValidationPanel } from "./ValidationPanel";
 
@@ -30,7 +33,9 @@ export function Planner() {
   const [optimization, setOptimization] = useState<Optimization | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [timeLimit, setTimeLimit] = useState(10);
-  const [busy, setBusy] = useState<"analyze" | "optimize" | null>(null);
+  const [busy, setBusy] = useState<"analyze" | "optimize" | "explain" | null>(null);
+  const [explanation, setExplanation] = useState<{ key: ValidationResult; data: Explanation } | null>(null);
+  const [view, setView] = useState<"plan" | "photo">("plan");
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -100,11 +105,11 @@ export function Planner() {
     else if (e.key === "Delete" || e.key === "Backspace") deleteObj(id);
   };
 
-  const call = async <T,>(kind: "analyze" | "optimize", body: object): Promise<T | null> => {
+  const call = async <T,>(kind: "analyze" | "optimize" | "explain", url: string, body: object): Promise<T | null> => {
     setBusy(kind);
     setError(null);
     try {
-      const res = await fetch(`/api/planner/${kind}`, {
+      const res = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -122,19 +127,30 @@ export function Planner() {
 
   const analyze = async () => {
     const sent = scenario;
-    const result = await call<ValidationResult>("analyze", { scenario: sent });
+    const result = await call<ValidationResult>("analyze", "/api/planner/analyze", { scenario: sent });
     if (result) setAnalysis({ scenario: sent, result });
   };
 
   const optimize = async () => {
     const sent = scenario;
-    const result = await call<OptimizationResult>("optimize", {
+    const result = await call<OptimizationResult>("optimize", "/api/planner/optimize", {
       scenario: sent, options: { time_limit_s: timeLimit },
     });
     if (!result) return;
     setOptimization({ scenario: sent, result });
     setAnalysis({ scenario: sent, result: result.baseline }); // same validator, same layout
     setPreviewId(null);
+  };
+
+  // The result currently on screen; explanations are tied to it.
+  const shown = preview ? preview.validation : stale ? null : result;
+  const explain = async () => {
+    if (!shown) return;
+    const evidence = preview
+      ? buildEvidence(scenario, optimization!.result.baseline, preview.validation, preview.moves)
+      : buildEvidence(scenario, shown, null, []);
+    const data = await call<Explanation>("explain", "/api/ai/explain", { evidence });
+    if (data) setExplanation({ key: shown, data });
   };
 
   const applyAlternative = (alt: Alternative) => {
@@ -201,6 +217,18 @@ export function Planner() {
         </aside>
 
         <main className="flex min-h-[420px] flex-col gap-2 p-3">
+          <div role="tablist" aria-label="Workspace" className="flex gap-1">
+            {(["plan", "photo"] as const).map((v) => (
+              <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
+                className={`rounded-t border-b-2 px-3 py-1 text-sm font-medium ${view === v ? "border-indigo-600 text-indigo-800" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
+                {v === "plan" ? "Floor plan" : "Photo (SAM 3.1)"}
+              </button>
+            ))}
+          </div>
+          <div className={view === "photo" ? "min-h-0 flex-1" : "hidden"}>
+            <PhotoPanel scenario={scenario} update={update} metaConfigured={health?.meta_configured ?? false} />
+          </div>
+          <div className={view === "plan" ? "flex min-h-0 flex-1 flex-col gap-2" : "hidden"}>
           {preview && (
             <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
               <span>Previewing option {previewIndex} (read-only). Outlines show where moved pieces were.</span>
@@ -218,9 +246,11 @@ export function Planner() {
               ghosts={ghosts} readOnly={Boolean(preview)} />
           </div>
           <Legend />
+          </div>
         </main>
 
         <aside className="overflow-y-auto border-slate-200 bg-white lg:border-l" aria-label="Requirements and results">
+          <RequestPanel scenario={scenario} update={update} metaConfigured={health?.meta_configured ?? false} />
           <RequirementsPanel scenario={scenario} update={update} />
           <Section title="Check this layout">
             {!issues.success && (
@@ -235,6 +265,9 @@ export function Planner() {
               <button onClick={optimize} disabled={busy !== null} className={primary}>
                 {busy === "optimize" ? "Searching…" : "Optimize"}
               </button>
+              <button onClick={explain} disabled={busy !== null || !shown} className={button}>
+                {busy === "explain" ? "Explaining…" : "Explain"}
+              </button>
               <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
                 Search time limit
                 <select value={timeLimit} onChange={(e) => setTimeLimit(Number(e.target.value))}
@@ -244,6 +277,7 @@ export function Planner() {
               </label>
             </div>
             {error && <p role="alert" className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-800">{error}</p>}
+            {explanation && explanation.key === shown && <ExplanationView explanation={explanation.data} />}
             {optimization && (
               <AlternativesPanel result={optimization.result} stale={optStale} scenario={scenario}
                 previewId={preview?.id ?? null} onPreview={setPreviewId} onUse={applyAlternative} />

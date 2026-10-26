@@ -103,26 +103,30 @@ const PRESETS: Record<string, [number, number]> = {
   obstacle: [60, 60], other: [60, 60],
 };
 
+/** New furniture at typical dimensions, marked unconfirmed until the user measures it. */
+export function newFurniture(s: RoomScenario, kind: (typeof KINDS)[number], label: string,
+  labelSource: Furniture["label_source"] = "user-provided"): Furniture {
+  let n = 1;
+  while (s.objects.some((o) => o.id === `${kind}-${n}`)) n++;
+  const [w, h] = PRESETS[kind];
+  return {
+    id: `${kind}-${n}`, label, kind, width_cm: w, height_cm: h,
+    x_cm: Math.max(0, Math.round((s.room.width_cm - w) / 2)),
+    y_cm: Math.max(0, Math.round((s.room.height_cm - h) / 2)),
+    rotation_deg: 0, movable: kind !== "obstacle",
+    confirmed: false, // preset dimensions are estimates until measured
+    label_source: labelSource,
+  };
+}
+
 export function FurniturePanel({ scenario, selected, update, onSelect, onRotate, onDelete }: {
   scenario: RoomScenario; selected: Furniture | null; update: Update;
   onSelect: (id: string) => void; onRotate: (id: string) => void; onDelete: (id: string) => void;
 }) {
   const add = (kind: (typeof KINDS)[number]) => {
-    let n = 1;
-    while (scenario.objects.some((o) => o.id === `${kind}-${n}`)) n++;
-    const id = `${kind}-${n}`;
-    const [w, h] = PRESETS[kind];
-    update((s) => {
-      s.objects.push({
-        id, label: kind[0].toUpperCase() + kind.slice(1), kind, width_cm: w, height_cm: h,
-        x_cm: Math.max(0, Math.round((s.room.width_cm - w) / 2)),
-        y_cm: Math.max(0, Math.round((s.room.height_cm - h) / 2)),
-        rotation_deg: 0, movable: kind !== "obstacle",
-        confirmed: false, // preset dimensions are estimates until measured
-        label_source: "user-provided",
-      });
-    });
-    onSelect(id);
+    const o = newFurniture(scenario, kind, kind[0].toUpperCase() + kind.slice(1));
+    update((s) => { s.objects.push(o); });
+    onSelect(o.id);
   };
   const edit = (patch: Partial<Furniture>) => selected &&
     update((s) => { Object.assign(s.objects.find((o) => o.id === selected.id)!, patch); });

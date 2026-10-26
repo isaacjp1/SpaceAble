@@ -12,8 +12,8 @@ Boxes are ticked only after the relevant test or run has actually passed.
   (all except picking among several doors: the UI edits one door, `start_door_id` exists in the schema)
 - [x] 5. Deterministic `analyze` with structured evidence
 - [x] 6. Deterministic `optimize` returning 1–3 validated alternatives (or honest no-solution)
-- [ ] 7. Muse Spark 1.3 text → editable constraints; evidence-grounded explanation
-- [ ] 8. SAM 3.1 photo masks/boxes with user association to plan objects
+- [x] 7. Muse Spark 1.3 text → editable constraints; evidence-grounded explanation
+- [x] 8. SAM 3.1 photo masks/boxes with user association to plan objects
 - [ ] 9. Before/after, failed-check overlays, export JSON, printable summary
 - [ ] 10. Tests (geometry, routes, optimizer, API, e2e) + README with attribution
 
@@ -47,11 +47,11 @@ Boxes are ticked only after the relevant test or run has actually passed.
 
 ## Meta AI features
 
-- [ ] Muse text → constraints (strict schema, Zod re-validation, review panel)
-- [ ] Muse explanation from validator evidence + deterministic fallback
-- [ ] SAM segmentation via `@meta-sam/parser`
-- [ ] Photo overlay + object ↔ plan association UI
-- [ ] Mocked tests: missing key, 429, zero matches, bogus IDs
+- [x] Muse text → constraints (strict schema, Zod re-validation, review panel); live-verified
+- [x] Muse explanation from validator evidence + grounding check + deterministic fallback; live-verified
+- [x] SAM segmentation via `@meta-sam/parser`; live-verified
+- [x] Photo overlay + object ↔ plan association UI (Playwright, mocked AI)
+- [x] Mocked tests: missing key, 429, zero matches, bogus IDs, ungrounded explanations
 
 ## Product UX and evaluation
 

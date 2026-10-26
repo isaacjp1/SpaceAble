@@ -17,12 +17,13 @@ Progress is tracked in `TASKS.md`.
 
 | Works now | Not yet |
 | --- | --- |
-| 2D measured room editor (drag, arrow keys, numeric fields, rotate, lock, add/delete) | Muse/SAM in the UI |
-| Planner `analyze`: containment, collisions, door width, approach zones, clearance-aware routes, turning circle | Before/after split view, print view, benchmark |
-| Planner `optimize`: up to 3 diverse alternatives, each re-validated; honest no-solution statuses | Deployment |
+| 2D measured room editor (drag, arrow keys, numeric fields, rotate, lock, add/delete) | Before/after split view, print view, benchmark |
+| Planner `analyze`: containment, collisions, door width, approach zones, clearance-aware routes, turning circle | Deployment |
+| Planner `optimize`: up to 3 diverse alternatives, each re-validated; honest no-solution statuses | |
 | Verified route overlay, reachable area, failed-object highlighting, alternative preview with arrows | |
 | Save/load JSON, sample-room reset | |
-| Meta smoke script (`npm run smoke:meta`), verified against the live API | Muse/SAM wired into the product workflow |
+| Muse Spark 1.3: sentence → reviewed, editable requirements; grounded explanations with a labelled template fallback | |
+| SAM 3.1: photo segmentation overlay, user-confirmed links to plan furniture | |
 
 ## Run locally
 
