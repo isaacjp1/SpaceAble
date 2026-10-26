@@ -28,6 +28,7 @@ test("a Muse proposal is reviewed, edited and applied by the user", async ({ pag
   await expect(review).toBeVisible();
   await expect(review.getByText("check if doorway meets ADA")).toBeVisible();
   await expect(review.getByLabel("Route width")).toHaveValue("91.44");
+  await expect(review.getByLabel("Optimizer preference")).toHaveValue("minimal_changes");
   // nothing is applied until the user approves
   await expect(page.getByLabel("Route width")).toHaveCount(2);
 

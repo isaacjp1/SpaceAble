@@ -131,6 +131,15 @@ export function RequestPanel({ scenario, update, metaConfigured }: {
               onCommit={(v) => edit({ turning_diameter_cm: v })}
               hint={review.proposal.turning_diameter_cm === null ? "Not stated; keeping your current value." : "From your request."} />
           </div>
+          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+            Optimizer preference
+            <select value={review.form.optimization_profile}
+              onChange={(e) => edit({ optimization_profile: e.target.value as Proposal["optimization_profile"] })}
+              className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900">
+              <option value="minimal_changes">Fewest changes</option>
+              <option value="max_clearance">Most open space (not implemented yet; ranks by fewest changes)</option>
+            </select>
+          </label>
           {review.proposal.clarifying_questions.length > 0 && (
             <div className="text-xs text-slate-700">
               <p className="font-medium">Muse asks:</p>
