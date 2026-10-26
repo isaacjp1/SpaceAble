@@ -1,0 +1,433 @@
+{
+  "$defs": {
+    "Destination": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "object_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "side": {
+          "enum": [
+            "top",
+            "right",
+            "bottom",
+            "left"
+          ],
+          "title": "Side",
+          "type": "string"
+        },
+        "approach_width_cm": {
+          "exclusiveMinimum": 0,
+          "maximum": 3000.0,
+          "title": "Approach Width Cm",
+          "type": "number"
+        },
+        "approach_depth_cm": {
+          "exclusiveMinimum": 0,
+          "maximum": 3000.0,
+          "title": "Approach Depth Cm",
+          "type": "number"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "object_id",
+        "side",
+        "approach_width_cm",
+        "approach_depth_cm"
+      ],
+      "title": "Destination",
+      "type": "object"
+    },
+    "Door": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "wall": {
+          "enum": [
+            "top",
+            "right",
+            "bottom",
+            "left"
+          ],
+          "title": "Wall",
+          "type": "string"
+        },
+        "offset_cm": {
+          "maximum": 3000.0,
+          "minimum": 0,
+          "title": "Offset Cm",
+          "type": "number"
+        },
+        "clear_width_cm": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 3000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clear Width Cm"
+        },
+        "entry_anchor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Point"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confirmed": {
+          "default": false,
+          "title": "Confirmed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "wall",
+        "offset_cm"
+      ],
+      "title": "Door",
+      "type": "object"
+    },
+    "Furniture": {
+      "additionalProperties": false,
+      "description": "Fixed obstacles are furniture with movable=False.",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "kind": {
+          "default": "other",
+          "enum": [
+            "bed",
+            "desk",
+            "dresser",
+            "chair",
+            "table",
+            "wardrobe",
+            "nightstand",
+            "sofa",
+            "shelf",
+            "obstacle",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "x_cm": {
+          "maximum": 3000.0,
+          "minimum": 0,
+          "title": "X Cm",
+          "type": "number"
+        },
+        "y_cm": {
+          "maximum": 3000.0,
+          "minimum": 0,
+          "title": "Y Cm",
+          "type": "number"
+        },
+        "width_cm": {
+          "exclusiveMinimum": 0,
+          "maximum": 3000.0,
+          "title": "Width Cm",
+          "type": "number"
+        },
+        "height_cm": {
+          "exclusiveMinimum": 0,
+          "maximum": 3000.0,
+          "title": "Height Cm",
+          "type": "number"
+        },
+        "rotation_deg": {
+          "default": 0,
+          "enum": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "title": "Rotation Deg",
+          "type": "integer"
+        },
+        "movable": {
+          "default": true,
+          "title": "Movable",
+          "type": "boolean"
+        },
+        "confirmed": {
+          "default": false,
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "label_source": {
+          "default": "user-provided",
+          "enum": [
+            "user-provided",
+            "ai-inferred"
+          ],
+          "title": "Label Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x_cm",
+        "y_cm",
+        "width_cm",
+        "height_cm"
+      ],
+      "title": "Furniture",
+      "type": "object"
+    },
+    "Point": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Point",
+      "type": "object"
+    },
+    "Requirements": {
+      "additionalProperties": false,
+      "properties": {
+        "route_width_cm": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 3000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Route Width Cm"
+        },
+        "door_min_clear_width_cm": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 3000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Door Min Clear Width Cm"
+        },
+        "turning_diameter_cm": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 3000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turning Diameter Cm"
+        },
+        "required_destination_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Required Destination Ids",
+          "type": "array"
+        },
+        "locked_object_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "type": "string"
+          },
+          "maxItems": 40,
+          "title": "Locked Object Ids",
+          "type": "array"
+        },
+        "optimization_profile": {
+          "default": "minimal_changes",
+          "enum": [
+            "minimal_changes",
+            "max_clearance"
+          ],
+          "title": "Optimization Profile",
+          "type": "string"
+        },
+        "start_door_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Door Id"
+        }
+      },
+      "title": "Requirements",
+      "type": "object"
+    },
+    "Room": {
+      "additionalProperties": false,
+      "properties": {
+        "width_cm": {
+          "exclusiveMinimum": 0,
+          "maximum": 3000.0,
+          "title": "Width Cm",
+          "type": "number"
+        },
+        "height_cm": {
+          "exclusiveMinimum": 0,
+          "maximum": 3000.0,
+          "title": "Height Cm",
+          "type": "number"
+        }
+      },
+      "required": [
+        "width_cm",
+        "height_cm"
+      ],
+      "title": "Room",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]+$",
+      "title": "Id",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "units": {
+      "const": "cm",
+      "default": "cm",
+      "title": "Units",
+      "type": "string"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "room": {
+      "$ref": "#/$defs/Room"
+    },
+    "doors": {
+      "items": {
+        "$ref": "#/$defs/Door"
+      },
+      "maxItems": 8,
+      "title": "Doors",
+      "type": "array"
+    },
+    "objects": {
+      "items": {
+        "$ref": "#/$defs/Furniture"
+      },
+      "maxItems": 40,
+      "title": "Objects",
+      "type": "array"
+    },
+    "destinations": {
+      "items": {
+        "$ref": "#/$defs/Destination"
+      },
+      "maxItems": 20,
+      "title": "Destinations",
+      "type": "array"
+    },
+    "requirements": {
+      "$ref": "#/$defs/Requirements"
+    }
+  },
+  "required": [
+    "id",
+    "room"
+  ],
+  "title": "RoomScenario",
+  "type": "object"
+}
