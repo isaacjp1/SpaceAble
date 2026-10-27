@@ -59,7 +59,7 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Keyboard controls, Help & limits dialog, disclaimer, inches display, cancel, mobile layout (plan first, no horizontal scroll at 390 px)
 - [x] Save/load JSON (with selected alternative + explanation), print summary, browser autosave with restore (Playwright)
 - [x] Synthetic benchmark (`docs/benchmark.md`): 21 rooms, 0 verification mismatches, reproducible; found + fixed an optimizer gap
-- [x] Playwright flows (13 tests; AI routes mocked)
+- [x] Playwright flows (14 tests incl. building a room from scratch; AI routes mocked)
 
 - [x] Demo script (`docs/demo-script.md`)
 

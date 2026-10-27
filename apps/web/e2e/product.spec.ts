@@ -43,9 +43,10 @@ test("the last room is kept in the browser and can be restored", async ({ page }
   await y.press("Enter");
   await page.reload();
   await expect(page.getByText("Your room from last time")).toBeVisible();
-  // editing the sample first must not lose the saved room
-  await page.getByRole("button", { name: "Desk", exact: true }).click();
-  await page.keyboard.press("Tab");
+  // a real edit to the sample (autosave fires) must not lose the saved room
+  await page.getByRole("button", { name: /^Desk, 110 by 65 cm/ }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByLabel("X (left edge)")).toHaveValue("120");
   await page.getByRole("button", { name: "Restore it" }).click();
   await page.getByRole("button", { name: "Dresser", exact: true }).click();
   await expect(page.getByLabel("Y (top edge)")).toHaveValue("300");
@@ -65,4 +66,24 @@ test("a slow request can be cancelled without an error", async ({ page }) => {
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByRole("button", { name: "Optimize" })).toBeEnabled();
   await expect(page.getByText("Could not reach the SpaceAble server.")).toHaveCount(0);
+});
+
+test("a new user can build a room from scratch and get a result", async ({ page }) => {
+  await page.goto("/");
+  for (const name of ["Bed", "Desk", "Dresser"]) {
+    await page.getByRole("button", { name, exact: true }).click();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+  }
+  await expect(page.getByText("The room is empty. Add furniture above.")).toBeVisible();
+
+  await page.getByLabel("Add furniture").selectOption("desk");
+  await page.getByRole("button", { name: "Add approach zone" }).click();
+  await page.getByRole("button", { name: "Analyze" }).click();
+  // the preset size is an estimate, so no verdict until it is confirmed
+  await expect(page.getByText("More information needed before a result")).toBeVisible();
+
+  await page.getByLabel("Measurements confirmed", { exact: true }).check();
+  await page.getByRole("button", { name: "Analyze" }).click();
+  await expect(page.getByText("Passes the configured geometric checks")).toBeVisible();
+  await expect(page.getByText(/Verified 80 cm route to desk-1-approach/)).toBeVisible();
 });
