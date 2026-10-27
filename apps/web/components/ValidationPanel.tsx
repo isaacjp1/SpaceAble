@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtCm } from "@/lib/geometry-ui";
 import type { Check, Status, ValidationResult } from "@/lib/schema";
 
 export const DISCLAIMER =
@@ -22,7 +23,7 @@ const OVERALL: Record<Status, string> = {
   unknown: "Unknown",
 };
 
-function title(c: Check) {
+export function title(c: Check) {
   if (c.id.startsWith("approach-")) return `Approach zone: ${c.id.slice(9)}`;
   if (c.id.startsWith("route-")) return `Route to ${c.id.split("-to-").pop()}`;
   return ({
@@ -44,7 +45,9 @@ export function StatusBadge({ status }: { status: Status }) {
   );
 }
 
-export function ValidationPanel({ result, stale }: { result: ValidationResult | null; stale: boolean }) {
+export function ValidationPanel({ result, stale, inches = false }: {
+  result: ValidationResult | null; stale: boolean; inches?: boolean;
+}) {
   return (
     <div aria-live="polite" className="flex flex-col gap-3">
       {!result ? (
@@ -74,9 +77,9 @@ export function ValidationPanel({ result, stale }: { result: ValidationResult | 
                 <p className="mt-1 text-xs text-slate-600">{c.message}</p>
                 {(c.measured_cm !== null || c.required_cm !== null) && (
                   <p className="mt-1 text-xs tabular-nums text-slate-500">
-                    {c.measured_cm !== null && <>measured {c.measured_cm} cm</>}
+                    {c.measured_cm !== null && <>measured {fmtCm(c.measured_cm, inches)}</>}
                     {c.measured_cm !== null && c.required_cm !== null && " · "}
-                    {c.required_cm !== null && <>required ≥ {c.required_cm} cm</>}
+                    {c.required_cm !== null && <>required ≥ {fmtCm(c.required_cm, inches)}</>}
                   </p>
                 )}
               </li>

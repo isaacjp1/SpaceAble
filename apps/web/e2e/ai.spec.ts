@@ -64,7 +64,7 @@ test("SAM detections overlay the photo and are linked to plan furniture by the u
     ] } });
   });
   await page.goto("/");
-  await page.getByRole("tab", { name: "Photo (SAM 3.1)" }).click();
+  await page.getByRole("button", { name: "Photo (SAM 3.1)" }).click();
   await page.getByRole("button", { name: "Use sample photo" }).click();
   await expect(page.getByRole("img", { name: /Sample: hostel twin room/ })).toBeVisible();
   await page.getByLabel("Look for").fill("bed, piano");
@@ -78,6 +78,6 @@ test("SAM detections overlay the photo and are linked to plan furniture by the u
   await expect(page.locator("svg text", { hasText: "bed #1 → Bed" })).toBeVisible();
 
   // the plan is untouched by detections; switching back still shows the same room
-  await page.getByRole("tab", { name: "Floor plan" }).click();
+  await page.getByRole("button", { name: "Floor plan" }).click();
   await expect(page.getByRole("button", { name: /^Bed, 150 by 200 cm/ })).toBeVisible();
 });

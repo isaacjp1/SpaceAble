@@ -14,8 +14,8 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] 6. Deterministic `optimize` returning 1–3 validated alternatives (or honest no-solution)
 - [x] 7. Muse Spark 1.3 text → editable constraints; evidence-grounded explanation
 - [x] 8. SAM 3.1 photo masks/boxes with user association to plan objects
-- [ ] 9. Before/after, failed-check overlays, export JSON, printable summary
-- [ ] 10. Tests (geometry, routes, optimizer, API, e2e) + README with attribution
+- [x] 9. Before/after, failed-check overlays, export JSON, printable summary
+- [x] 10. Tests (geometry, routes, optimizer, API, e2e) + README with attribution
 
 ## Setup
 
@@ -55,11 +55,13 @@ Boxes are ticked only after the relevant test or run has actually passed.
 
 ## Product UX and evaluation
 
-- [ ] Alternatives, before/after, route overlay, movement arrows
-- [ ] Keyboard controls, help, disclaimer, mobile fallback
-- [ ] Save/load JSON, print view
-- [ ] Synthetic benchmark (`docs/benchmark.md`)
-- [ ] Playwright smoke flow
+- [x] Alternatives, before/after side-by-side, route overlay, movement arrows (Playwright)
+- [x] Keyboard controls, Help & limits dialog, disclaimer, inches display, cancel, mobile layout (plan first, no horizontal scroll at 390 px)
+- [x] Save/load JSON (with selected alternative + explanation), print summary, browser autosave with restore (Playwright)
+- [x] Synthetic benchmark (`docs/benchmark.md`): 21 rooms, 0 verification mismatches, reproducible; found + fixed an optimizer gap
+- [x] Playwright flows (13 tests; AI routes mocked)
+
+- [x] Demo script (`docs/demo-script.md`)
 
 ## Release
 

@@ -72,7 +72,7 @@ test("optimize returns verified alternatives that can be previewed and applied",
   await first.getByRole("button", { name: "Preview" }).click();
   await expect(page.getByText("Previewing option 1 (read-only)")).toBeVisible();
   await expect(page.locator("text=(before)").first()).toBeVisible(); // ghost of the old spot
-  await expect(page.locator('line[marker-end="url(#arrow)"]').first()).toBeVisible();
+  await expect(page.locator('line[marker-end^="url(#"]').first()).toBeVisible();
   await expect(page.getByText("Passes the configured geometric checks")).toBeVisible();
 
   await page.getByRole("button", { name: "Use this layout" }).first().click();

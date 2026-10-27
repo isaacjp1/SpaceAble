@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { flushSync } from "react-dom";
 import fixture from "../../../shared/fixtures/canonical-bedroom.json";
 import { buildEvidence } from "@/lib/ai";
 import { applyMoves, clampToRoom, rotate } from "@/lib/geometry-ui";
@@ -11,11 +12,25 @@ import {
 import { type Explanation, ExplanationView, RequestPanel } from "./AiPanels";
 import { AlternativesPanel } from "./AlternativesPanel";
 import { FurniturePanel, RequirementsPanel, RoomPanel, Section, type Update } from "./Panels";
+import { HelpDialog } from "./HelpDialog";
 import { PhotoPanel } from "./PhotoPanel";
+import { PrintSummary } from "./PrintSummary";
 import { RoomCanvas } from "./RoomCanvas";
-import { DISCLAIMER, ValidationPanel } from "./ValidationPanel";
+import { DISCLAIMER, StatusBadge, ValidationPanel } from "./ValidationPanel";
 
 const SAMPLE = RoomScenarioSchema.parse(fixture);
+
+// Browser persistence: the current room autosaves to SAVED. On load, the previous visit's room
+// is moved to PREVIOUS first, so editing before choosing Restore can't overwrite it.
+const SAVED = "spaceable:scenario";
+const PREVIOUS = "spaceable:previous";
+const listeners = new Set<() => void>();
+const storage = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode / quota */ } },
+  remove: (k: string) => { try { localStorage.removeItem(k); } catch { /* ignore */ } listeners.forEach((l) => l()); },
+  subscribe: (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; },
+};
 
 type Health = { planner: "ok" | "unreachable"; meta_configured: boolean };
 type Analysis = { scenario: RoomScenario; result: ValidationResult };
@@ -36,6 +51,12 @@ export function Planner() {
   const [busy, setBusy] = useState<"analyze" | "optimize" | "explain" | null>(null);
   const [explanation, setExplanation] = useState<{ key: ValidationResult; data: Explanation } | null>(null);
   const [view, setView] = useState<"plan" | "photo">("plan");
+  const [compare, setCompare] = useState(false);
+  const [inches, setInches] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const abort = useRef<AbortController | null>(null);
+  const help = useRef<HTMLDialogElement>(null);
+  const previous = useSyncExternalStore(storage.subscribe, () => storage.get(PREVIOUS), () => null);
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -44,6 +65,26 @@ export function Planner() {
     fetch("/api/health").then((r) => r.json()).then(setHealth)
       .catch(() => setHealth({ planner: "unreachable", meta_configured: false }));
   }, []);
+  useEffect(() => { // runs before the autosave below on first render
+    const saved = storage.get(SAVED);
+    if (saved && saved !== JSON.stringify(SAMPLE)) storage.set(PREVIOUS, saved);
+    listeners.forEach((l) => l());
+  }, []);
+  useEffect(() => storage.set(SAVED, JSON.stringify(scenario)), [scenario]);
+  useEffect(() => { // render the print summary only for printing (Ctrl+P or the button)
+    const before = () => flushSync(() => setPrinting(true));
+    const after = () => setPrinting(false);
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+    };
+  }, []);
+  const restorable = (() => {
+    if (!previous) return null;
+    try { const r = RoomScenarioSchema.safeParse(JSON.parse(previous)); return r.success ? r.data : null; } catch { return null; }
+  })();
 
   // Results belong to the exact scenario object they were computed for.
   const stale = analysis !== null && analysis.scenario !== scenario;
@@ -106,6 +147,8 @@ export function Planner() {
   };
 
   const call = async <T,>(kind: "analyze" | "optimize" | "explain", url: string, body: object): Promise<T | null> => {
+    const ctrl = new AbortController();
+    abort.current = ctrl;
     setBusy(kind);
     setError(null);
     try {
@@ -113,14 +156,16 @@ export function Planner() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
+        signal: ctrl.signal,
       });
       const data = await res.json();
       if (res.ok) return data as T;
       setError((data as ApiError).error?.message ?? `Planner error ${res.status}`);
     } catch {
-      setError("Could not reach the SpaceAble server.");
+      if (!ctrl.signal.aborted) setError("Could not reach the SpaceAble server.");
     } finally {
       setBusy(null);
+      abort.current = null;
     }
     return null;
   };
@@ -166,8 +211,11 @@ export function Planner() {
     const bundle = {
       format: "spaceable-export/1",
       exported_at: new Date().toISOString(),
-      scenario,
-      validation: stale ? null : result,
+      scenario, // the current layout; a selected alternative is applied via its layout
+      validation: shown, // planner result for what is on screen (null if out of date)
+      selected_alternative: preview ?? null,
+      baseline: preview ? optimization!.result.baseline : null,
+      explanation: explanation && explanation.key === shown ? explanation.data : null,
       disclaimer: DISCLAIMER,
     };
     const url = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" }));
@@ -193,12 +241,19 @@ export function Planner() {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col lg:h-dvh">
-      <header className="no-print flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 bg-white px-4 py-2">
+    <>
+    <div className="flex min-h-dvh flex-col lg:h-dvh print:hidden">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 bg-white px-4 py-2">
         <span className="text-lg font-bold tracking-tight text-indigo-700">SpaceAble</span>
         <span className="text-sm text-slate-600">{scenario.title ?? scenario.id}</span>
         <ServiceStatus health={health} />
-        <div className="ml-auto flex flex-wrap gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1 text-sm text-slate-700">
+            <input type="checkbox" className="accent-indigo-600" checked={inches} onChange={(e) => setInches(e.target.checked)} />
+            Show inches
+          </label>
+          <button className={button} onClick={() => help.current?.showModal()}>Help &amp; limits</button>
+          <button className={button} onClick={() => window.print()}>Print summary</button>
           <button className={button} onClick={exportJson}>Save JSON</button>
           <button className={button} onClick={() => fileInput.current?.click()}>Load JSON</button>
           <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" aria-hidden="true"
@@ -208,6 +263,15 @@ export function Planner() {
           </button>
         </div>
       </header>
+      {restorable && (
+        <div role="status" className="flex flex-wrap items-center gap-2 border-b border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-900">
+          <span>Your room from last time (“{restorable.title ?? restorable.id}”) is saved in this browser.</span>
+          <span className="ml-auto flex gap-2">
+            <button className={button} onClick={() => { setScenario(restorable); clearResults(); storage.remove(PREVIOUS); }}>Restore it</button>
+            <button className={button} onClick={() => storage.remove(PREVIOUS)}>Dismiss</button>
+          </span>
+        </div>
+      )}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_340px]">
         <aside className="overflow-y-auto border-slate-200 bg-white lg:border-r" aria-label="Room setup">
@@ -216,10 +280,11 @@ export function Planner() {
             onSelect={setSelectedId} onRotate={rotateObj} onDelete={deleteObj} />
         </aside>
 
-        <main className="flex min-h-[420px] flex-col gap-2 p-3">
-          <div role="tablist" aria-label="Workspace" className="flex gap-1">
+        {/* on phones the plan comes first; the panels follow */}
+        <main className="order-first flex min-h-[420px] flex-col gap-2 p-3 lg:order-none">
+          <div aria-label="Workspace" className="flex gap-1">
             {(["plan", "photo"] as const).map((v) => (
-              <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
+              <button key={v} aria-pressed={view === v} onClick={() => setView(v)}
                 className={`rounded-t border-b-2 px-3 py-1 text-sm font-medium ${view === v ? "border-indigo-600 text-indigo-800" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
                 {v === "plan" ? "Floor plan" : "Photo (SAM 3.1)"}
               </button>
@@ -233,18 +298,43 @@ export function Planner() {
             <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
               <span>Previewing option {previewIndex} (read-only). Outlines show where moved pieces were.</span>
               <span className="ml-auto flex gap-2">
+                <button className={button} aria-pressed={compare} onClick={() => setCompare(!compare)}>
+                  {compare ? "Single view" : "Side by side"}
+                </button>
                 <button className={button} onClick={() => applyAlternative(preview)}>Use this layout</button>
                 <button className={button} onClick={() => setPreviewId(null)}>Back to editing</button>
               </span>
             </div>
           )}
+          {preview && compare ? (
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-2">
+              {[
+                { label: "Before", s: scenario, v: optimization!.result.baseline, g: [] },
+                { label: `After: option ${previewIndex}`, s: applyMoves(scenario, preview.moves), v: preview.validation, g: ghosts },
+              ].map(({ label, s, v, g }) => (
+                <figure key={label} className="flex min-h-[300px] flex-col rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <figcaption className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">
+                    {label} <StatusBadge status={v.status} />
+                    <span className="text-xs font-normal text-slate-600">
+                      {v.checks.filter((c) => c.required && c.id.startsWith("route-")).map((c) => c.message).join(" ")}
+                    </span>
+                  </figcaption>
+                  <div className="min-h-0 flex-1">
+                    <RoomCanvas scenario={s} result={v} stale={false} selectedId={null}
+                      lockedIds={scenario.requirements.locked_object_ids} ghosts={g} readOnly inches={inches} />
+                  </div>
+                </figure>
+              ))}
+            </div>
+          ) : (
           <div className="min-h-0 flex-1 rounded-lg border border-slate-200 bg-slate-50">
             <RoomCanvas scenario={preview ? applyMoves(scenario, preview.moves) : scenario}
               result={preview ? preview.validation : result} stale={preview ? false : stale}
               selectedId={selectedId} lockedIds={scenario.requirements.locked_object_ids}
               onSelect={setSelectedId} onDrag={moveTo} onKey={onKey}
-              ghosts={ghosts} readOnly={Boolean(preview)} />
+              ghosts={ghosts} readOnly={Boolean(preview)} inches={inches} />
           </div>
+          )}
           <Legend />
           </div>
         </main>
@@ -268,6 +358,7 @@ export function Planner() {
               <button onClick={explain} disabled={busy !== null || !shown} className={button}>
                 {busy === "explain" ? "Explaining…" : "Explain"}
               </button>
+              {busy && <button onClick={() => abort.current?.abort()} className={button}>Cancel</button>}
               <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
                 Search time limit
                 <select value={timeLimit} onChange={(e) => setTimeLimit(Number(e.target.value))}
@@ -276,13 +367,16 @@ export function Planner() {
                 </select>
               </label>
             </div>
+            {busy === "optimize" && (
+              <p className="text-xs text-slate-500">Searching for up to {timeLimit} s. Cancel stops waiting; the planner finishes its current search on its own.</p>
+            )}
             {error && <p role="alert" className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-800">{error}</p>}
             {explanation && explanation.key === shown && <ExplanationView explanation={explanation.data} />}
             {optimization && (
               <AlternativesPanel result={optimization.result} stale={optStale} scenario={scenario}
                 previewId={preview?.id ?? null} onPreview={setPreviewId} onUse={applyAlternative} />
             )}
-            <ValidationPanel result={preview ? preview.validation : result} stale={preview ? false : stale} />
+            <ValidationPanel result={preview ? preview.validation : result} stale={preview ? false : stale} inches={inches} />
           </Section>
         </aside>
       </div>
@@ -290,7 +384,14 @@ export function Planner() {
       <footer className="border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
         <strong>Not a certification.</strong> {DISCLAIMER}
       </footer>
+      <HelpDialog ref={help} />
     </div>
+    {printing && <div className="hidden print:block">
+      <PrintSummary scenario={scenario} result={shown} baseline={preview ? optimization!.result.baseline : null}
+        alternative={preview ?? null} explanation={explanation && explanation.key === shown ? explanation.data : null}
+        inches={inches} />
+    </div>}
+    </>
   );
 }
 

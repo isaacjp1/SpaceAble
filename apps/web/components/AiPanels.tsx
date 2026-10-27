@@ -126,10 +126,10 @@ export function RequestPanel({ scenario, update, metaConfigured }: {
           <div className="grid grid-cols-2 gap-2">
             <NumberField label="Route width" value={review.form.route_width_cm} nullable
               onCommit={(v) => edit({ route_width_cm: v })}
-              hint={review.proposal.route_width_cm === null ? "Not stated; keeping your current value." : "From your request."} />
+              hint={review.proposal.route_width_cm === null ? "No new value in your request; keeping your current one." : "From your request."} />
             <NumberField label="Turning circle" value={review.form.turning_diameter_cm} nullable
               onCommit={(v) => edit({ turning_diameter_cm: v })}
-              hint={review.proposal.turning_diameter_cm === null ? "Not stated; keeping your current value." : "From your request."} />
+              hint={review.proposal.turning_diameter_cm === null ? "No new value in your request; keeping your current one." : "From your request."} />
           </div>
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
             Optimizer preference

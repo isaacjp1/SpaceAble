@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef } from "react";
-import { dims } from "@/lib/geometry-ui";
+import { useId, useRef } from "react";
+import { dims, fmtCm } from "@/lib/geometry-ui";
 import type { Door, Furniture, RoomScenario, ValidationResult } from "@/lib/schema";
 
 type Props = {
@@ -10,18 +10,24 @@ type Props = {
   stale: boolean;
   selectedId: string | null;
   lockedIds: string[];
-  onSelect: (id: string | null) => void;
-  onDrag: (id: string, x: number, y: number) => void;
-  onKey: (id: string, e: React.KeyboardEvent) => void;
+  onSelect?: (id: string | null) => void;
+  onDrag?: (id: string, x: number, y: number) => void;
+  onKey?: (id: string, e: React.KeyboardEvent) => void;
   /** Original placements of moved pieces, drawn as outlines with arrows to the new ones. */
   ghosts?: Furniture[];
   readOnly?: boolean;
+  inches?: boolean;
 };
+
+const noop = () => {};
 
 const SNAP = 5;
 
-export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onSelect, onDrag, onKey,
-  ghosts = [], readOnly = false }: Props) {
+export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onSelect = noop, onDrag = noop,
+  onKey = noop, ghosts = [], readOnly = false, inches = false }: Props) {
+  // unique ids so several plans (compare view, print) can share a page
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const ref = (name: string) => `${uid}-${name}`;
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<{ id: string; x0: number; y0: number; px: number; py: number } | null>(null);
   const { width_cm: W, height_cm: H } = scenario.room;
@@ -55,7 +61,7 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
     <svg
       ref={svg}
       viewBox={`${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad}`}
-      className="h-full w-full touch-none select-none"
+      className="h-full w-full select-none"
       role="group"
       aria-label={`Floor plan, ${W} by ${H} centimetres. Furniture can be focused and moved with arrow keys.`}
       onPointerMove={move}
@@ -63,23 +69,23 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
       onPointerDown={() => onSelect(null)}
     >
       <defs>
-        <pattern id="grid20" width="20" height="20" patternUnits="userSpaceOnUse">
+        <pattern id={ref("grid20")} width="20" height="20" patternUnits="userSpaceOnUse">
           <path d="M 20 0 L 0 0 0 20" fill="none" className="stroke-slate-200" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         </pattern>
-        <pattern id="grid100" width="100" height="100" patternUnits="userSpaceOnUse">
-          <rect width="100" height="100" fill="url(#grid20)" />
+        <pattern id={ref("grid100")} width="100" height="100" patternUnits="userSpaceOnUse">
+          <rect width="100" height="100" fill={`url(#${ref("grid20")})`} />
           <path d="M 100 0 L 0 0 0 100" fill="none" className="stroke-slate-300" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         </pattern>
-        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <marker id={ref("arrow")} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" className="fill-indigo-700" />
         </marker>
-        <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <pattern id={ref("hatch")} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <line x1="0" y1="0" x2="0" y2="8" className="stroke-red-500" strokeWidth="3" />
         </pattern>
       </defs>
 
       <rect x={0} y={0} width={W} height={H} className="fill-white" />
-      <rect x={0} y={0} width={W} height={H} fill="url(#grid100)" />
+      <rect x={0} y={0} width={W} height={H} fill={`url(#${ref("grid100")})`} />
 
       {/* planner evidence */}
       <g opacity={stale ? 0.25 : 1} aria-hidden="true">
@@ -138,7 +144,7 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
         return (
           <g key={o.id} tabIndex={0} role="button" aria-pressed={selected}
             aria-label={`${o.label}, ${w} by ${h} cm at x ${o.x_cm}, y ${o.y_cm}${locked ? ", locked" : ""}${!o.movable ? ", fixed" : ""}${bad ? ", involved in a failed check" : ""}. Arrow keys move, R rotates, Delete removes.`}
-            className={`${readOnly ? "cursor-default" : "cursor-move"} outline-none [&:focus-visible>rect:first-child]:stroke-indigo-500`}
+            className={`${readOnly ? "cursor-default" : "cursor-move touch-none"} outline-none [&:focus-visible>rect:first-child]:stroke-indigo-500`}
             onPointerDown={down(o.id, o.x_cm, o.y_cm)}
             onFocus={() => onSelect(o.id)}
             onKeyDown={(e) => !readOnly && onKey(o.id, e)}>
@@ -146,14 +152,14 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
               className={`${o.movable ? "fill-amber-100" : "fill-stone-300"} ${selected ? "stroke-indigo-600" : bad ? "stroke-red-600" : "stroke-stone-500"}`}
               strokeWidth={selected || bad ? 3 : 1.5} vectorEffect="non-scaling-stroke"
               strokeDasharray={o.confirmed ? undefined : "5 3"} />
-            {bad && <rect x={o.x_cm} y={o.y_cm} width={w} height={h} fill="url(#hatch)" opacity={0.25} pointerEvents="none" />}
+            {bad && <rect x={o.x_cm} y={o.y_cm} width={w} height={h} fill={`url(#${ref("hatch")})`} opacity={0.25} pointerEvents="none" />}
             <text x={o.x_cm + w / 2} y={o.y_cm + h / 2 - fs * 0.15} textAnchor="middle"
               fontSize={fs} className="fill-stone-800 font-medium" pointerEvents="none">
               {bad ? "⚠ " : ""}{o.label}{locked ? " (locked)" : ""}
             </text>
             <text x={o.x_cm + w / 2} y={o.y_cm + h / 2 + fs * 0.95} textAnchor="middle"
               fontSize={fs * 0.75} className="fill-stone-600" pointerEvents="none">
-              {w}×{h}{o.confirmed ? "" : " (unconfirmed)"}
+              {w}×{h}{inches ? ` cm (${(w / 2.54).toFixed(0)}×${(h / 2.54).toFixed(0)} in)` : ""}{o.confirmed ? "" : " (unconfirmed)"}
             </text>
           </g>
         );
@@ -166,16 +172,16 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
         return (
           <line key={`arrow-${g.id}`} x1={g.x_cm + a.w / 2} y1={g.y_cm + a.h / 2}
             x2={now.x_cm + b.w / 2} y2={now.y_cm + b.h / 2} className="stroke-indigo-700"
-            strokeWidth="2.5" vectorEffect="non-scaling-stroke" markerEnd="url(#arrow)" pointerEvents="none" />
+            strokeWidth="2.5" vectorEffect="non-scaling-stroke" markerEnd={`url(#${ref("arrow")})`} pointerEvents="none" />
         );
       })}
 
       {/* walls, doors, dimensions */}
       <rect x={0} y={0} width={W} height={H} fill="none" className="stroke-slate-800" strokeWidth="4" vectorEffect="non-scaling-stroke" pointerEvents="none" />
       {scenario.doors.map((d) => <DoorGlyph key={d.id} door={d} W={W} H={H} fs={fs} />)}
-      <text x={W / 2} y={-fs * 0.8} textAnchor="middle" fontSize={fs} className="fill-slate-600">{W} cm</text>
+      <text x={W / 2} y={-fs * 0.8} textAnchor="middle" fontSize={fs} className="fill-slate-600">{fmtCm(W, inches)}</text>
       <text x={-fs * 0.8} y={H / 2} textAnchor="middle" fontSize={fs} className="fill-slate-600"
-        transform={`rotate(-90 ${-fs * 0.8} ${H / 2})`}>{H} cm</text>
+        transform={`rotate(-90 ${-fs * 0.8} ${H / 2})`}>{fmtCm(H, inches)}</text>
       <g aria-hidden="true">
         <line x1={0} y1={H + fs * 1.4} x2={100} y2={H + fs * 1.4} className="stroke-slate-700" strokeWidth="2" vectorEffect="non-scaling-stroke" />
         <line x1={0} y1={H + fs * 1.0} x2={0} y2={H + fs * 1.8} className="stroke-slate-700" strokeWidth="2" vectorEffect="non-scaling-stroke" />

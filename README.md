@@ -17,11 +17,13 @@ Progress is tracked in `TASKS.md`.
 
 | Works now | Not yet |
 | --- | --- |
-| 2D measured room editor (drag, arrow keys, numeric fields, rotate, lock, add/delete) | Before/after split view, print view, benchmark |
-| Planner `analyze`: containment, collisions, door width, approach zones, clearance-aware routes, turning circle | Deployment |
+| 2D measured room editor (drag, arrow keys, numeric fields, rotate, lock, add/delete) | Deployment |
+| Planner `analyze`: containment, collisions, door width, approach zones, clearance-aware routes, turning circle | Undo/redo, `max_clearance` ranking |
 | Planner `optimize`: up to 3 diverse alternatives, each re-validated; honest no-solution statuses | |
 | Verified route overlay, reachable area, failed-object highlighting, alternative preview with arrows | |
-| Save/load JSON, sample-room reset | |
+| Before/after side by side, print summary, Help & limits, inches display, browser autosave with restore | |
+| Save/load JSON (including the chosen alternative and explanation), sample-room reset | |
+| Benchmark: 21 synthetic rooms, every result independently re-verified ([docs/benchmark.md](docs/benchmark.md)) | |
 | Muse Spark 1.3: sentence → reviewed, editable requirements; grounded explanations with a labelled template fallback | |
 | SAM 3.1: photo segmentation overlay, user-confirmed links to plan furniture | |
 
@@ -49,7 +51,8 @@ online and whether a key is configured. It never shows the key itself.
 ## Tests
 
 ```bash
-cd services/planner && pytest -q && ruff check .        # geometry, routing, API contract
+cd services/planner && pytest -q && ruff check .        # geometry, routing, optimizer, API, benchmark smoke
+cd services/planner && python -m app.benchmark --repeat --write ../../docs/benchmark.md
 cd apps/web && npm run test && npm run lint && npm run typecheck
 cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # browser flow, uses both services
 cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed  # REAL, billed Meta calls

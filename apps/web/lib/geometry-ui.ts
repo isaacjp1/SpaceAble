@@ -28,7 +28,9 @@ export function rotate(o: Furniture, room: RoomScenario["room"]): Furniture {
   return clampToRoom({ ...o, rotation_deg, x_cm: cx - n.w / 2, y_cm: cy - n.h / 2 }, room);
 }
 
-export const cmToIn = (cm: number) => cm / 2.54;
+/** "90 cm", or "90 cm (35.4 in)" when inches are shown. cm stays the unit of record. */
+export const fmtCm = (cm: number, inches = false) =>
+  inches ? `${cm} cm (${(cm / 2.54).toFixed(1)} in)` : `${cm} cm`;
 
 /** The scenario with an alternative's moves applied (mirrors the planner's apply_layout). */
 export function applyMoves(s: RoomScenario, moves: Move[]): RoomScenario {
