@@ -71,7 +71,11 @@ def _grid(limit: float, size: float, step: float) -> list[float]:
 
 
 def _candidates(o, scenario, fixed_rects, fixed_zones, req_dests, start, r, grid):
-    """Placements for one movable object: (list with 'stay' first, truncated?)."""
+    """Placements for one movable object: (list with 'stay' first, truncated?).
+
+    A new piece (to_place) has no 'stay' and nothing to move from: placing it costs only the
+    off-wall preference, so every combination places it and existing pieces move only if needed.
+    """
     room = scenario.room
     dests = [d for d in req_dests if d.object_id == o.id]
 
@@ -88,7 +92,7 @@ def _candidates(o, scenario, fixed_rects, fixed_zones, req_dests, start, r, grid
         w, h = dims(o.model_copy(update={"rotation_deg": rot}))
         for x in _grid(room.width_cm, w, grid):
             for y in _grid(room.height_cm, h, grid):
-                if (x, y, rot) == (o.x_cm, o.y_cm, o.rotation_deg):
+                if not o.to_place and (x, y, rot) == (o.x_cm, o.y_cm, o.rotation_deg):
                     continue
                 c = cand(o.model_copy(update={"x_cm": x, "y_cm": y, "rotation_deg": rot}), 0.0)
                 if (any(overlaps(c.rect, f) for f in fixed_rects)
@@ -102,13 +106,17 @@ def _candidates(o, scenario, fixed_rects, fixed_zones, req_dests, start, r, grid
                 x1, y1, x2, y2 = c.rect.bounds
                 on_wall = (x1 <= EPS or y1 <= EPS or x2 >= room.width_cm - EPS
                            or y2 >= room.height_cm - EPS)
-                cost = (MOVE_PENALTY
-                        + DISPLACEMENT_WEIGHT * math.dist(_centre(c.rect), _centre(stay.rect))
-                        + ROTATION_PENALTY * (rot != o.rotation_deg)
-                        + OFF_WALL_PENALTY * (not on_wall))
+                cost = OFF_WALL_PENALTY * (not on_wall)
+                if not o.to_place:
+                    cost += (MOVE_PENALTY
+                             + DISPLACEMENT_WEIGHT * math.dist(_centre(c.rect), _centre(stay.rect))
+                             + ROTATION_PENALTY * (rot != o.rotation_deg))
                 out.append(Cand(c.obj, c.rect, c.approach, cost))
     out.sort(key=lambda c: (c.cost, c.obj.x_cm, c.obj.y_cm, c.obj.rotation_deg))
-    return [stay] + out[:MAX_CANDIDATES_PER_OBJECT], len(out) > MAX_CANDIDATES_PER_OBJECT
+    # Limit: a new piece keeps the 120 cheapest spots (wall-flush first, then top-left first);
+    # the search then reports a budget limit, never infeasibility, if that cut anything.
+    return (([] if o.to_place else [stay]) + out[:MAX_CANDIDATES_PER_OBJECT],
+            len(out) > MAX_CANDIDATES_PER_OBJECT)
 
 
 def _compatible(chosen: list[Cand]) -> bool:
@@ -185,6 +193,8 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
     baseline = analyze(scenario)
     warnings: list[str] = []
     by_width = req.optimization_profile == "max_clearance"
+    new = [o for o in scenario.objects if o.to_place]  # every option must place these
+    placing = f" with a place for the new {', '.join(o.label for o in new)}" if new else ""
     tested = considered = 0
     exhaustive = False
 
@@ -197,7 +207,7 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
                 candidates_tested=tested, exhaustive=exhaustive))
 
     current = None
-    if baseline.status == "pass":
+    if baseline.status == "pass" and not new:
         length = _route_length(baseline, required)
         baseline.widest_route_cm = widest_route(scenario)
         current = Alternative(id="current", layout=Layout(), moves=[], validation=baseline,
@@ -207,7 +217,9 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
             return done("solutions_found", "The current layout already passes; nothing needs to "
                         "move.", [current])
         # max_clearance keeps searching, but only for layouts with a wider route than this one.
-    blocking = [c for c in baseline.checks if c.required and c.status in ("needs_input", "unknown")]
+    blocking = [c for c in baseline.checks if c.required and c.status in ("needs_input", "unknown")
+                # the baseline leaves new pieces out, and with them their destinations
+                and not (new and c.id == "destinations-selected")]
     if blocking:
         return done("needs_input", "Resolve these before optimizing: "
                     + " ".join(c.message for c in blocking))
@@ -258,6 +270,13 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
                                  options.grid_spacing_cm)
         lists.append(cands)
         truncated |= cut
+    nowhere = [o.label for o, cands in zip(movers, lists, strict=True) if not cands]
+    if nowhere:
+        exhaustive = not truncated
+        return done("discretized_search_infeasible", f"No spot for the new {', '.join(nowhere)} "
+                    f"among the {options.grid_spacing_cm:g} cm grid placements tried: everywhere "
+                    "it overlaps fixed furniture, a required approach zone or the doorway.")
+    is_new = [o.to_place for o in movers]  # a new piece's index 0 is a placement, not 'stay'
 
     found: list[Alternative] = []
     first = (0,) * len(lists)
@@ -269,7 +288,7 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
             timed_out = True
             break
         _, idx = heapq.heappop(heap)
-        moved = sum(i > 0 for i in idx)
+        moved = sum(i > 0 for i, n in zip(idx, is_new, strict=True) if not n)
         if moved > MAX_MOVED_OBJECTS:
             continue  # every successor moves at least as many objects
         for k in range(len(idx)):
@@ -277,29 +296,23 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
             if nxt[k] < len(lists[k]) and nxt not in seen:
                 seen.add(nxt)
                 heapq.heappush(heap, (sum(lists[j][i].cost for j, i in enumerate(nxt)), nxt))
-        if moved == 0:
+        if moved == 0 and not new:
             continue  # the unmoved layout is the baseline, analysed above
         considered += 1
         chosen = [lists[k][i] for k, i in enumerate(idx)]
         if not _compatible(chosen) or not _connected(chosen, scenario, fixed_rects,
                                                      fixed_targets, start, r):
             continue
+        changed = [c for k, c in enumerate(chosen) if idx[k] > 0 or is_new[k]]
         positions = [ObjectPosition(object_id=c.obj.id, x_cm=c.obj.x_cm, y_cm=c.obj.y_cm,
-                                    rotation_deg=c.obj.rotation_deg)
-                     for k, c in enumerate(chosen) if idx[k] > 0]
+                                    rotation_deg=c.obj.rotation_deg) for c in changed]
         layout = Layout(object_positions=positions)
         tested += 1
         moved_scenario = apply_layout(scenario, layout)
         v = analyze(moved_scenario)
         if v.status != "pass":
             continue
-        moves = [Move(object_id=c.obj.id, from_x_cm=by_id[c.obj.id].x_cm,
-                      from_y_cm=by_id[c.obj.id].y_cm,
-                      from_rotation_deg=by_id[c.obj.id].rotation_deg, to_x_cm=c.obj.x_cm,
-                      to_y_cm=c.obj.y_cm, to_rotation_deg=c.obj.rotation_deg,
-                      distance_cm=round(math.dist(_centre(c.rect),
-                                                  _centre(footprint(by_id[c.obj.id]))), 1))
-                 for k, c in enumerate(chosen) if idx[k] > 0]
+        moves = [_move(c, by_id[c.obj.id]) for c in changed]
         if any(_near_duplicate(moves, alt.moves) for alt in found):
             continue
         v.widest_route_cm = widest_route(moved_scenario)
@@ -309,7 +322,8 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
         score = sum(c.cost for c in chosen) + ROUTE_LENGTH_WEIGHT * length
         found.append(Alternative(
             id="", layout=layout, moves=moves, validation=v,
-            cost=Cost(moved_objects=len(moves), displacement_cm=sum(m.distance_cm for m in moves),
+            cost=Cost(moved_objects=sum(not m.placed for m in moves),
+                      displacement_cm=sum(m.distance_cm for m in moves),
                       route_length_cm=length, total_score=round(score, 1))))
 
     exhaustive = not heap and not timed_out and not truncated and len(movers) <= MAX_MOVED_OBJECTS
@@ -329,10 +343,11 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
     if found:
         if timed_out:
             warnings.append("The search stopped at the time limit; other alternatives may exist.")
-        message = f"Found {len(found)} verified alternative{'s' if len(found) > 1 else ''}."
+        s = "s" if len(found) > 1 else ""
+        message = f"Found {len(found)} verified alternative{s}{placing}."
         if by_width:
             wider = (f" with a route wider than the current {baseline.widest_route_cm:g} cm"
-                     if current else "")
+                     if current else placing)
             message = (f"Found {pooled} verified layout{'s' if pooled > 1 else ''}{wider}, "
                        "searching from the fewest changes. Showing the widest, skipping any "
                        "that move more furniture for no extra width.")
@@ -342,12 +357,23 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
                     f"route wider than its {baseline.widest_route_cm:g} cm was found among "
                     "those tried.", [current])
     if exhaustive:
-        return done("discretized_search_infeasible", "No verified layout among the "
+        return done("discretized_search_infeasible", f"No verified layout{placing} among the "
                     f"{options.grid_spacing_cm:g} cm grid placements tried. A valid arrangement "
                     "off this grid may still exist; try a finer grid or adjust the requirements.")
-    return done("no_solution_found_within_budget", "No verified solution was found within the "
-                "search limits. Try moving a piece by hand, unlocking furniture, relaxing a "
-                "requirement, or allowing more search time.")
+    return done("no_solution_found_within_budget", f"No verified solution{placing} was found "
+                "within the search limits. Try moving a piece by hand, unlocking furniture, "
+                "relaxing a requirement, or allowing more search time.")
+
+
+def _move(c: Cand, before: Furniture) -> Move:
+    """The change for one piece; a new piece is placed, so it has no distance to report."""
+    to = {"to_x_cm": c.obj.x_cm, "to_y_cm": c.obj.y_cm, "to_rotation_deg": c.obj.rotation_deg}
+    if before.to_place:
+        return Move(object_id=c.obj.id, from_x_cm=c.obj.x_cm, from_y_cm=c.obj.y_cm,
+                    from_rotation_deg=c.obj.rotation_deg, **to, distance_cm=0, placed=True)
+    return Move(object_id=c.obj.id, from_x_cm=before.x_cm, from_y_cm=before.y_cm,
+                from_rotation_deg=before.rotation_deg, **to,
+                distance_cm=round(math.dist(_centre(c.rect), _centre(footprint(before))), 1))
 
 
 def _near_duplicate(a: list[Move], b: list[Move]) -> bool:

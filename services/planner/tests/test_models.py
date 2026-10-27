@@ -44,6 +44,9 @@ def mutate(fn) -> dict:
     (lambda d: d.update(objects=[{**d["objects"][0], "id": f"o{i}"} for i in range(41)]),
      "objects"),
     (lambda d: d["room"].update(width_cm=5000), "width_cm"),
+    (lambda d: d["objects"][0].update(to_place=True), "has no position yet"),  # the fixed bed
+    (lambda d: (d["objects"][1].update(to_place=True),
+                d["requirements"]["locked_object_ids"].append("desk")), "has no position yet"),
 ])
 def test_rejects_invalid(bad, fragment):
     with pytest.raises(ValidationError) as e:

@@ -4,9 +4,9 @@ from fastapi.testclient import TestClient
 
 from app.analyze import analyze
 from app.main import app
-from app.models import OptimizeOptions, apply_layout
+from app.models import OptimizeOptions, RoomScenario, apply_layout
 from app.optimize import _near_duplicate, optimize, widest_route
-from helpers import dest, load, make, obj
+from helpers import check, dest, load, make, obj, route_check
 
 OPTS = OptimizeOptions()
 VOLATILE = {"elapsed_ms", "widest_route_cm"}  # widest is added after analyze()
@@ -175,3 +175,52 @@ def test_max_clearance_keeps_the_current_layout_when_nothing_can_move():
     (alt,) = r.alternatives
     assert r.status == "solutions_found" and alt.id == "current"
     assert alt.validation.widest_route_cm == widest_route(s)
+
+
+def _with_new(name, size, approach_side=None, at=(0, 0)):
+    """A fixture plus a hypothetical shelf that has no position yet."""
+    d = load(name).model_dump(mode="json")
+    d["objects"].append(obj("shelf", *at, *size, kind="shelf", label="Shelf", to_place=True))
+    if approach_side:
+        d["destinations"].append(dest("shelf-approach", "shelf", approach_side))
+        d["requirements"]["required_destination_ids"].append("shelf-approach")
+    return RoomScenario.model_validate(d)
+
+
+def test_analyze_leaves_a_new_piece_out_and_says_so():
+    s = _with_new("canonical-bedroom", (100, 40), at=(260, 65))  # on top of the bed
+    v = analyze(s)
+    assert check(v, "object-collision").status == "pass"
+    unplaced = check(v, "unplaced-objects")
+    assert unplaced.status == "not_checked" and not unplaced.required
+    assert unplaced.object_ids == ["shelf"]
+    assert v.status == analyze(load("canonical-bedroom")).status
+
+
+def test_a_new_piece_is_placed_in_every_option_and_rechecked():
+    s = _with_new("canonical-bedroom", (100, 40))
+    r = optimize(s, OPTS)
+    assert r.status == "solutions_found" and "with a place for the new Shelf" in r.message
+    for alt in r.alternatives:
+        placed = [m for m in alt.moves if m.placed]
+        assert [m.object_id for m in placed] == ["shelf"] and placed[0].distance_cm == 0
+        assert alt.cost.moved_objects == len(alt.moves) - 1
+        moved = apply_layout(s, alt.layout)
+        assert not any(o.to_place for o in moved.objects)
+        again = analyze(moved)  # the independent re-check includes the shelf
+        assert again.status == "pass" and stable(again) == stable(alt.validation)
+        assert all(c.id != "unplaced-objects" for c in again.checks)
+
+
+def test_a_passing_room_still_searches_for_a_place_for_a_new_piece():
+    s = _with_new("feasible-bedroom", (100, 50), approach_side="bottom")
+    r = optimize(s, OPTS)
+    assert r.status == "solutions_found" and r.alternatives[0].id != "current"
+    for alt in r.alternatives:
+        assert any(m.placed for m in alt.moves)
+        assert route_check(alt.validation, "shelf-approach").status == "pass"
+
+
+def test_a_new_piece_too_big_for_the_room_is_reported():
+    r = optimize(_with_new("canonical-bedroom", (500, 500)), OPTS)
+    assert r.status == "discretized_search_infeasible" and "No spot for the new Shelf" in r.message

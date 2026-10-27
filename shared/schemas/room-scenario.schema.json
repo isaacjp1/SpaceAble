@@ -208,6 +208,11 @@
           ],
           "title": "Label Source",
           "type": "string"
+        },
+        "to_place": {
+          "default": false,
+          "title": "To Place",
+          "type": "boolean"
         }
       },
       "required": [

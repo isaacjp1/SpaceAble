@@ -91,7 +91,7 @@ def verify_validation(s: RoomScenario, v: ValidationResult) -> list[str]:
     problems = []
     req = s.requirements
     W, H = s.room.width_cm, s.room.height_cm
-    rects = {o.id: footprint(o) for o in s.objects}
+    rects = {o.id: footprint(o) for o in s.objects if not o.to_place}  # unplaced: not in the room
     if v.status == "pass":
         room = box(0, 0, W, H).buffer(EPS)
         problems += [f"{i} outside room" for i, r in rects.items() if not room.covers(r)]

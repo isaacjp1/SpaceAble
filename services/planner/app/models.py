@@ -60,6 +60,8 @@ class Furniture(Model):
     movable: bool = True
     confirmed: bool = False  # measurements confirmed by the user
     label_source: Literal["user-provided", "ai-inferred"] = "user-provided"
+    # A hypothetical new piece with no position yet: analyze leaves it out, optimize places it.
+    to_place: bool = False
 
 
 class Destination(Model):
@@ -111,6 +113,9 @@ class RoomScenario(Model):
         for ref, known, what in refs:
             if ref not in known:
                 raise ValueError(f"Unknown {what} id '{ref}'")
+        for o in self.objects:
+            if o.to_place and (not o.movable or o.id in req.locked_object_ids):
+                raise ValueError(f"'{o.id}' has no position yet, so it can't be fixed or locked")
         for d in self.doors:
             wall_len = self.room.height_cm if d.wall in ("left", "right") else self.room.width_cm
             if d.offset_cm + (d.clear_width_cm or 0) > wall_len + EPS:
@@ -141,9 +146,23 @@ def apply_layout(scenario: RoomScenario, layout: Layout) -> RoomScenario:
     for p in layout.object_positions:
         if p.object_id not in by_id:
             raise ValueError(f"Unknown object id '{p.object_id}' in layout")
-        by_id[p.object_id] = by_id[p.object_id].model_copy(
-            update={"x_cm": p.x_cm, "y_cm": p.y_cm, "rotation_deg": p.rotation_deg})
+        by_id[p.object_id] = by_id[p.object_id].model_copy(update={
+            "x_cm": p.x_cm, "y_cm": p.y_cm, "rotation_deg": p.rotation_deg, "to_place": False})
     return scenario.model_copy(update={"objects": [by_id[o.id] for o in scenario.objects]})
+
+
+def without_unplaced(scenario: RoomScenario) -> RoomScenario:
+    """The scenario minus pieces that have no position yet, and their destinations."""
+    gone = {o.id for o in scenario.objects if o.to_place}
+    if not gone:
+        return scenario
+    dests = {d.id for d in scenario.destinations if d.object_id in gone}
+    req = scenario.requirements
+    return scenario.model_copy(update={
+        "objects": [o for o in scenario.objects if o.id not in gone],
+        "destinations": [d for d in scenario.destinations if d.id not in dests],
+        "requirements": req.model_copy(update={"required_destination_ids": [
+            i for i in req.required_destination_ids if i not in dests]})})
 
 
 class AnalyzeOptions(Model):
@@ -221,6 +240,7 @@ class Move(Model):
     to_y_cm: float
     to_rotation_deg: int
     distance_cm: float  # footprint centre to footprint centre
+    placed: bool = False  # a new (to_place) piece put here: from_* equal to_*, distance 0
 
 
 class Cost(Model):

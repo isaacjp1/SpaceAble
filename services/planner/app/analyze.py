@@ -17,6 +17,7 @@ from .models import (
     RouteEvidence,
     TurningZone,
     ValidationResult,
+    without_unplaced,
 )
 
 
@@ -26,12 +27,18 @@ def _r1(v: float) -> float:
 
 def analyze(scenario: RoomScenario, grid_cm: float = 5.0) -> ValidationResult:
     t0 = perf_counter()
+    unplaced = [o.id for o in scenario.objects if o.to_place]
+    scenario = without_unplaced(scenario)  # new pieces with no position yet are not in the room
     room, req = scenario.room, scenario.requirements
     objs = {o.id: o for o in scenario.objects}
     fps = {i: footprint(o) for i, o in objs.items()}
     rects = list(fps.values())
     checks: list[Check] = []
     warnings: list[str] = []
+    if unplaced:
+        checks.append(Check(
+            id="unplaced-objects", status="not_checked", required=False, object_ids=unplaced,
+            message=f"Not placed yet: {', '.join(unplaced)}. Optimize looks for a place."))
 
     unconfirmed = [o.id for o in scenario.objects if not o.confirmed]
     unconfirmed += [d.id for d in scenario.doors if not d.confirmed]
