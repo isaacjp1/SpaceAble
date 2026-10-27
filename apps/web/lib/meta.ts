@@ -7,6 +7,7 @@ export const META = {
   baseURL: process.env.META_BASE_URL ?? "https://api.meta.ai/v1",
   muse: process.env.META_MUSE_MODEL ?? "muse-spark-1.3",
   sam: process.env.META_SAM_MODEL ?? "sam-3.1",
+  voice: process.env.META_VOICE_MODEL ?? "muse-voice-transcribe-1.0",
 };
 
 /** A client per request (picks up key rotation); null when no key is configured. */

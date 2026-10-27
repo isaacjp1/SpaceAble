@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import type { Proposal } from "@/lib/ai";
 import type { ApiError, RoomScenario } from "@/lib/schema";
+import { MicButton } from "./MicButton";
 import { NumberField, Section, type Update } from "./Panels";
 
 const button =
@@ -20,6 +21,12 @@ export function RequestPanel({ scenario, update, metaConfigured }: {
   scenario: RoomScenario; update: Update; metaConfigured: boolean;
 }) {
   const [text, setText] = useState("");
+  const textBox = useRef<HTMLTextAreaElement>(null);
+  // Spoken words are added to the box for review; nothing goes to Muse until the person asks.
+  const addTranscript = (t: string) => {
+    setText((cur) => (cur.trim() ? `${cur.trim()} ${t}` : t).slice(0, 1000));
+    textBox.current?.focus();
+  };
   const [review, setReview] = useState<Review | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -85,11 +92,13 @@ export function RequestPanel({ scenario, update, metaConfigured }: {
     <Section title="Describe what you need">
       <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
         In your own words
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={1000}
+        <textarea ref={textBox} value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={1000}
           placeholder="Keep my bed where it is, but make the route to my desk clearer."
           className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-2 focus:outline-indigo-500" />
       </label>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <MicButton disabled={!metaConfigured || busy} onTranscript={addTranscript}
+          keywords={[...new Set(scenario.objects.map((o) => o.label)), "wheelchair", "inches", "centimetres"]} />
         <button className={button} disabled={!metaConfigured || busy || text.trim().length < 3} onClick={interpret}>
           {busy ? "Asking Muse…" : "Turn into requirements"}
         </button>

@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as explain } from "@/app/api/ai/explain/route";
 import { POST as parseRequest } from "@/app/api/ai/parse-request/route";
 import { POST as segmentRoute } from "@/app/api/ai/segment/route";
+import { POST as transcribe } from "@/app/api/ai/transcribe/route";
+import { encodeWav } from "@/lib/wav";
 
 const scenario = JSON.parse(readFileSync(
   path.join(import.meta.dirname, "../../../shared/fixtures/canonical-bedroom.json"), "utf8"));
@@ -114,5 +116,53 @@ describe("POST /api/ai/segment", () => {
     expect((await segmentRoute(form(jpg, ["bed", "desk", "chair", "lamp"]))).status).toBe(422);
     expect((await segmentRoute(form(jpg, ["Segment the bed!"]))).status).toBe(422);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/ai/transcribe", () => {
+  const wav = (seconds: number, rate = 16_000) => encodeWav(new Float32Array(seconds * rate), rate);
+  const form = (audio: Uint8Array<ArrayBuffer>, keywords: string[] = []) => {
+    const f = new FormData();
+    f.append("audio", new Blob([audio], { type: "audio/wav" }), "recording.wav");
+    for (const k of keywords) f.append("keyword", k);
+    return new Request("http://app/api/ai/transcribe", { method: "POST", body: f });
+  };
+
+  it("returns META_NOT_CONFIGURED without a key", async () => {
+    vi.stubEnv("MODEL_API_KEY", "");
+    expect((await transcribe(form(wav(1)))).status).toBe(503);
+  });
+
+  it("checks the recording's own bytes before anything is sent to Meta", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    expect((await transcribe(form(new TextEncoder().encode("OggS....")))).status).toBe(415);
+    const stereo = wav(1);
+    stereo[22] = 2; // channel count
+    expect((await transcribe(form(stereo))).status).toBe(422);
+    expect((await transcribe(form(wav(1, 44_100)))).status).toBe(422);
+    expect((await transcribe(form(wav(61)))).status).toBe(422);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("sends a push-to-talk WAV request with furniture keywords and returns the transcript", async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json({
+      sessionId: "s1", transcript: " Keep my bed where it is. ", audioDurationMs: 1000, turns: [] }));
+    vi.stubGlobal("fetch", fetch);
+    const res = await transcribe(form(wav(1), ["Bed", "Desk", "Bed", "<script>"]));
+    expect(await res.json()).toEqual({ model: "muse-voice-transcribe-1.0", transcript: "Keep my bed where it is." });
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toBe("https://api.meta.ai/v1/asr/transcribe");
+    expect(init.headers).toEqual({ authorization: "Bearer test-key" });
+    expect(JSON.parse(await (init.body.get("request") as Blob).text())).toEqual({
+      mode: "PUSH_TO_TALK", model: "muse-voice-transcribe-1.0", audioEncoding: "WAV", keywords: ["Bed", "Desk"] });
+    expect((init.body.get("audio") as Blob).size).toBe(44 + 2 * 16_000);
+  });
+
+  it("maps an upstream 429 to a polite retryable error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ error: "slow down" }, { status: 429 })));
+    const res = await transcribe(form(wav(1)));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toMatchObject({ code: "META_RATE_LIMITED", retryable: true });
   });
 });

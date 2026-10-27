@@ -11,7 +11,7 @@ export function HelpDialog({ ref }: { ref: React.Ref<HTMLDialogElement> }) {
         <ol className="list-decimal space-y-1 pl-5">
           <li>Start from the sample bedroom, or set your own room size, door and furniture on the left. Measure what you can and tick “confirmed”.</li>
           <li>For each place you need to reach, select the furniture and choose <strong>Add approach zone</strong>, then pick the side you approach from.</li>
-          <li>Set your route width (and a turning circle if you want one) under <strong>Your clearance needs</strong>, or describe your needs in a sentence and review what Meta Muse Spark proposes before applying it.</li>
+          <li>Set your route width (and a turning circle if you want one) under <strong>Your clearance needs</strong>, or describe your needs in a sentence (type it, or press <strong>Speak</strong> and press again to stop) and review what Meta Muse Spark proposes before applying it.</li>
           <li>Press <strong>Analyze</strong>. Every check is computed by the planner from your measurements, never by the AI.</li>
           <li>Press <strong>Optimize</strong> to search for up to three verified rearrangements. Preview one, compare it side by side, then <strong>Use this layout</strong>.</li>
           <li>Press <strong>Explain</strong> for a plain-language summary that may only quote the planner’s numbers.</li>
@@ -29,9 +29,9 @@ export function HelpDialog({ ref }: { ref: React.Ref<HTMLDialogElement> }) {
           <li>Nothing here checks ADA or any building code, and it is no substitute for an occupational therapist.</li>
         </ul>
         <h3 className="font-semibold text-slate-900">Privacy</h3>
-        <p>Rooms stay in your browser unless you export them. Photos are resized in your browser, sent to Meta’s API only when you press Detect, and not stored by SpaceAble.</p>
+        <p>Rooms stay in your browser unless you export them. Photos are resized in your browser, sent to Meta’s API only when you press Detect, and not stored by SpaceAble. Voice recordings are sent to Meta’s API only when you stop recording, with your furniture names as hints, and are not stored either. What you said appears in the text box for you to check first.</p>
         <p className="rounded border border-amber-300 bg-amber-50 p-2 text-amber-900">{DISCLAIMER}</p>
-        <p className="text-xs text-slate-500">Uses Meta Muse Spark 1.3 and SAM 3.1 (Meta Model API). Sample photo: Profpcde, Wikimedia Commons, CC0.</p>
+        <p className="text-xs text-slate-500">Uses Meta Muse Spark 1.3, SAM 3.1 and Muse Voice Transcribe (Meta Model API). Sample photo: Profpcde, Wikimedia Commons, CC0.</p>
         <form method="dialog" className="flex justify-end">
           <button className="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
             Close

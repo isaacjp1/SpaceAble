@@ -25,6 +25,9 @@ problem. A geometry engine, not an AI, decides whether a layout works.
      the planner didn't produce is replaced by a labelled template.
    - **SAM 3.1** outlines furniture in a room photo (parsed with Meta's official `@meta-sam/parser`). You
      link what it finds to your plan. Photo pixels are never turned into measurements.
+   - **Muse Voice Transcribe** lets you say your request instead of typing it, for anyone who finds
+     typing hard. Tap **Speak**, then tap again to stop (no press-and-hold). The words land in the text
+     box for you to check and edit, and nothing goes to Muse Spark until you ask.
 
 | Muse proposes, you approve | Before / after, both verified | SAM outlines, you confirm |
 | --- | --- | --- |
@@ -70,8 +73,8 @@ and say nothing about real homes.
 ```bash
 cd services/planner && pytest -q && ruff check .        # 65 tests: geometry, routes, optimizer, API, benchmark
 cd services/planner && python -m app.benchmark --repeat --write ../../docs/benchmark.md
-cd apps/web && npm run test && npm run lint && npm run typecheck   # 44 tests, Meta mocked at the fetch layer
-cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # 15 browser flows, AI routes mocked
+cd apps/web && npm run test && npm run lint && npm run typecheck   # 52 tests, Meta mocked at the fetch layer
+cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # 17 browser flows, AI routes mocked
 cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed speech.wav   # REAL, billed Meta calls
 ```
 
@@ -96,13 +99,15 @@ docs/                architecture, benchmark, deployment, demo script, screensho
 ## Privacy and security
 
 Rooms stay in your browser unless you export them. Photos are resized in the browser (which drops EXIF/GPS),
-sent to Meta only when you press Detect, and not stored or logged by SpaceAble. Meta's terms govern
+sent to Meta only when you press Detect, and not stored or logged by SpaceAble. Voice recordings are
+converted to WAV in the browser, sent to Meta only when you stop recording, and not stored or logged
+either; your furniture names go with them as recognition hints. Meta's terms govern
 processing on their side. The Meta key and the planner's shared secret are server-only. The planner rejects
 any caller without the secret.
 
 ## Attribution
 
-- Built with Meta's Model API: **Muse Spark 1.3** and **SAM 3.1** (https://dev.meta.ai). SAM output is parsed
+- Built with Meta's Model API: **Muse Spark 1.3**, **SAM 3.1** and **Muse Voice Transcribe** (https://dev.meta.ai). SAM output is parsed
   with Meta's [`@meta-sam/parser`](https://www.npmjs.com/package/@meta-sam/parser) (SAM License).
 - Sample photo `apps/web/public/samples/hostel-twin-room.jpg`: "Twin room in a German youth hostel with single
   beds and wardrobe A" by Profpcde,
