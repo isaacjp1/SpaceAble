@@ -20,10 +20,12 @@ const proposal = {
   clarifying_questions: ["What route width do you need?"], unsupported_requests: [],
 };
 const evidence = {
-  requirements: { route_width_cm: 80, door_min_clear_width_cm: 80, turning_diameter_cm: null },
+  requirements: { route_width_cm: 80, door_min_clear_width_cm: 80, turning_diameter_cm: null,
+    optimization_profile: "minimal_changes" },
   before: { status: "fail", checks: [{ id: "route-door-1-to-desk-approach", status: "fail", required: true,
-    measured_cm: null, required_cm: 80, message: "No verified 80 cm route from door-1." }] },
-  after: null, moves: [], limitations: [],
+    measured_cm: null, required_cm: 80, message: "No verified 80 cm route from door-1." }],
+    widest_route_cm: null, warnings: [] },
+  after: null, moves: [], option: null, search: null, limitations: [],
 };
 
 beforeEach(() => vi.stubEnv("MODEL_API_KEY", "test-key"));

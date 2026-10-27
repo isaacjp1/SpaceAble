@@ -130,7 +130,7 @@ def run(scenarios: list[RoomScenario], time_limit_s: float) -> list[dict]:
         for alt in res.alternatives:
             moved = apply_layout(s, alt.layout)
             again = analyze(moved)
-            volatile = {"elapsed_ms"}
+            volatile = {"elapsed_ms", "widest_route_cm"}  # widest is added after analyze()
             if again.model_dump(exclude=volatile) != alt.validation.model_dump(exclude=volatile):
                 problems.append(f"{alt.id}: re-analysis differs")
             if alt.validation.status != "pass":

@@ -17,7 +17,7 @@ from .models import (
     ValidationResult,
     apply_layout,
 )
-from .optimize import optimize
+from .optimize import optimize, widest_route
 
 MAX_BODY_BYTES = 512 * 1024
 
@@ -82,7 +82,10 @@ def analyze_endpoint(body: AnalyzeRequest):
             scenario = apply_layout(scenario, body.layout_override)
         except ValueError as e:
             return error(422, "VALIDATION_ERROR", str(e))
-    return analyze(scenario, body.options.grid_cm)
+    result = analyze(scenario, body.options.grid_cm)
+    if result.status == "pass":
+        result.widest_route_cm = widest_route(scenario, body.options.grid_cm)
+    return result
 
 
 @app.post("/v1/planner/optimize", response_model=OptimizationResult)

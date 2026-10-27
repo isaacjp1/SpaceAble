@@ -191,9 +191,10 @@ export function Planner() {
   const shown = preview ? preview.validation : stale ? null : result;
   const explain = async () => {
     if (!shown) return;
+    const opt = optStale ? null : optimization?.result ?? null; // the search behind what is shown
     const evidence = preview
-      ? buildEvidence(scenario, optimization!.result.baseline, preview.validation, preview.moves)
-      : buildEvidence(scenario, shown, null, []);
+      ? buildEvidence(scenario, optimization!.result.baseline, opt, preview)
+      : buildEvidence(scenario, shown, opt);
     const data = await call<Explanation>("explain", "/api/ai/explain", { evidence });
     if (data) setExplanation({ key: shown, data });
   };

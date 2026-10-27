@@ -50,6 +50,7 @@ Boxes are ticked only after the relevant test or run has actually passed.
 
 - [x] Muse text → constraints (strict schema, Zod re-validation, review panel); live-verified
 - [x] Muse explanation from validator evidence + grounding check + deterministic fallback; live-verified
+- [x] Explain covers the widest verified route, option rank and ranking, search outcome and warnings; live-verified 2026-10-27
 - [x] SAM segmentation via `@meta-sam/parser`; live-verified
 - [x] Photo overlay + object ↔ plan association UI (Playwright, mocked AI)
 - [x] Mocked tests: missing key, 429, zero matches, bogus IDs, ungrounded explanations

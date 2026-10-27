@@ -78,6 +78,9 @@ export function PrintSummary({ scenario, result, baseline, alternative, explanat
       {result ? (
         <section>
           <h2 className="font-semibold">Checks: {STATUS[result.status]}</h2>
+          {result.widest_route_cm !== null && (
+            <p>Routes stay verified up to {fmtCm(result.widest_route_cm, inches)} wide.</p>
+          )}
           <table className="w-full border-collapse">
             <thead><tr>{["Check", "Result", "Measured", "Required", "Details"].map((h) => <th key={h} className={cell}>{h}</th>)}</tr></thead>
             <tbody>

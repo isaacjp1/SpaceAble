@@ -144,7 +144,7 @@ def _last_true(pred, hi: int) -> int:
     return lo
 
 
-def widest_route(scenario: RoomScenario) -> float | None:
+def widest_route(scenario: RoomScenario, grid_cm: float = 5.0) -> float | None:
     """Widest route width, in 1 cm steps above the required one, at which `analyze` passes.
 
     For a layout that already passes. A polygon test (the entry's free-space component
@@ -166,8 +166,9 @@ def widest_route(scenario: RoomScenario) -> float | None:
         return comp is not None and all(comp.intersection(t).area > EPS for t in targets)
 
     def passes(w: float) -> bool:
-        wider = req.model_copy(update={"route_width_cm": w})
-        return analyze(scenario.model_copy(update={"requirements": wider})).status == "pass"
+        wider = scenario.model_copy(update={
+            "requirements": req.model_copy(update={"route_width_cm": w})})
+        return analyze(wider, grid_cm).status == "pass"
 
     base = req.route_width_cm
     steps = _last_true(lambda k: connected(base + k),
@@ -198,10 +199,10 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
     current = None
     if baseline.status == "pass":
         length = _route_length(baseline, required)
+        baseline.widest_route_cm = widest_route(scenario)
         current = Alternative(id="current", layout=Layout(), moves=[], validation=baseline,
                               cost=Cost(moved_objects=0, displacement_cm=0, route_length_cm=length,
-                                        total_score=round(ROUTE_LENGTH_WEIGHT * length, 1),
-                                        widest_route_cm=widest_route(scenario)))
+                                        total_score=round(ROUTE_LENGTH_WEIGHT * length, 1)))
         if not by_width:
             return done("solutions_found", "The current layout already passes; nothing needs to "
                         "move.", [current])
@@ -301,21 +302,20 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
                  for k, c in enumerate(chosen) if idx[k] > 0]
         if any(_near_duplicate(moves, alt.moves) for alt in found):
             continue
-        width = widest_route(moved_scenario)
-        if current and width <= current.cost.widest_route_cm:
+        v.widest_route_cm = widest_route(moved_scenario)
+        if current and v.widest_route_cm <= baseline.widest_route_cm:
             continue
         length = _route_length(v, required)
         score = sum(c.cost for c in chosen) + ROUTE_LENGTH_WEIGHT * length
         found.append(Alternative(
             id="", layout=layout, moves=moves, validation=v,
             cost=Cost(moved_objects=len(moves), displacement_cm=sum(m.distance_cm for m in moves),
-                      route_length_cm=length, total_score=round(score, 1),
-                      widest_route_cm=width)))
+                      route_length_cm=length, total_score=round(score, 1))))
 
     exhaustive = not heap and not timed_out and not truncated and len(movers) <= MAX_MOVED_OBJECTS
     pooled = len(found)
     if by_width:
-        found.sort(key=lambda a: (-a.cost.widest_route_cm, a.cost.total_score))
+        found.sort(key=lambda a: (-a.validation.widest_route_cm, a.cost.total_score))
         kept: list[Alternative] = []
         for a in found:  # skip options that move the same pieces or more for no extra width
             pieces = {m.object_id for m in a.moves}
@@ -331,7 +331,7 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
             warnings.append("The search stopped at the time limit; other alternatives may exist.")
         message = f"Found {len(found)} verified alternative{'s' if len(found) > 1 else ''}."
         if by_width:
-            wider = (f" with a route wider than the current {current.cost.widest_route_cm:g} cm"
+            wider = (f" with a route wider than the current {baseline.widest_route_cm:g} cm"
                      if current else "")
             message = (f"Found {pooled} verified layout{'s' if pooled > 1 else ''}{wider}, "
                        "searching from the fewest changes. Showing the widest, skipping any "
@@ -339,7 +339,7 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
         return done("solutions_found", message, found)
     if current:
         return done("solutions_found", "The current layout already passes. No layout with a "
-                    f"route wider than its {current.cost.widest_route_cm:g} cm was found among "
+                    f"route wider than its {baseline.widest_route_cm:g} cm was found among "
                     "those tried.", [current])
     if exhaustive:
         return done("discretized_search_infeasible", "No verified layout among the "

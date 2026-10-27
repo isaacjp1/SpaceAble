@@ -114,8 +114,11 @@ They only rank layouts that already passed:
 Alternatives that move the same pieces to the same orientations within 60 cm of each other
 count as near-duplicates and are dropped.
 
-**Widest route.** Every returned layout reports `cost.widest_route_cm`: the widest route, in
-1 cm steps above the required width, at which `analyze` still passes it. A polygon test (the
+**Widest route.** Every passing result reports `widest_route_cm` (on `ValidationResult`): the
+widest route, in 1 cm steps above the required width, at which `analyze` still passes the
+layout. The analyze endpoint fills it for a passing layout, and the optimizer fills it for a
+passing baseline and every returned option. `analyze()` itself leaves it null, so the search
+loop stays fast; that is also why re-analysis comparisons ignore the field. A polygon test (the
 entry's free-space component, rebuilt for each width, touches every required approach zone)
 finds the bound by bisection. `analyze` must then pass at that width, or the value is lowered
 until it does. The route's `min_clearance_cm` can't serve here: the shortest path hugs the
@@ -185,12 +188,17 @@ Live-verified 2026-10-27 with `npm run smoke:meta -- speech.wav`:
   `{"sessionId", "transcript": "wheelchair. desk. furniture.", "audioDurationMs": 4160, "turns": []}`.
   `turns` is empty in `PUSH_TO_TALK` mode.
 
+Live-verified 2026-10-27 in the running app (real planner and Muse, no mocks), sample bedroom with
+"most open space": Explain on the previewed option said the widest verified route is 163 cm against
+the 80 cm needed, named it option 1 of 2 ranked by widest route, and quoted the search totals. On the
+unmoved layout it said 2 options could be previewed. Both drafts passed the grounding check.
+
 ### In the product
 
 | Route | What the model does | What stops it overreaching |
 | --- | --- | --- |
 | `parse-request` | Muse turns a sentence into `{locked_object_ids, required_destination_ids, route_width_cm, turning_diameter_cm, optimization_profile, clarifying_questions, unsupported_requests}` | The JSON schema has enums of the scenario's real IDs, and Zod re-validates the reply; unknown IDs are rejected (502, nothing applied). A width equal to the current value means "keep". A width when the text has no digits becomes a clarifying question instead of a value. The user edits and approves the proposal in a review form; nothing is applied automatically. The room title is never sent |
-| `explain` | Muse writes 3–5 sentences from the planner's evidence (checks, moves, assumptions) | `checkExplanation` rejects any number not in the evidence (±0.5 tolerance; integers ≤ 3 allowed as counts) and any sentence with a compliance, certification, guarantee or safety claim without a negation. A rejected draft is replaced by the deterministic template, with the reason shown. With no key or an upstream error the template is returned too, always labelled "Built-in explanation (no AI)" |
+| `explain` | Muse writes 3–6 sentences from the planner's evidence: checks before and after, moves, the widest verified route, the option's rank and how options were ranked, the search outcome (including why it found nothing), planner warnings and assumptions | `checkExplanation` rejects any number not in the evidence (±0.5 tolerance; integers ≤ 3 allowed as counts) and any sentence with a compliance, certification, guarantee or safety claim without a negation. A rejected draft is replaced by the deterministic template, with the reason shown. With no key or an upstream error the template is returned too, always labelled "Built-in explanation (no AI)" |
 | `segment` | SAM 3.1 segments 1–3 concepts, one request each, in parallel | The image type comes from its magic bytes (JPEG/PNG), at most 5 MB and 4096 px. The browser re-encodes the photo (max 1600 px), which drops EXIF/GPS. It is sent as a base64 data URL and never stored or logged. Detections only annotate the photo; the user links them to plan furniture, and "add as new" creates unmeasured (`confirmed: false`, `label_source: ai-inferred`) furniture |
 
 Errors follow the contract: no key gives 503 `META_NOT_CONFIGURED`, upstream 429 gives 429 `META_RATE_LIMITED`

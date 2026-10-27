@@ -63,6 +63,9 @@ export function ValidationPanel({ result, stale, inches = false }: {
             <p className="text-sm font-semibold">
               <span aria-hidden="true">{STATUS[result.status].icon} </span>{OVERALL[result.status]}
             </p>
+            {result.widest_route_cm !== null && (
+              <p className="mt-1 text-sm tabular-nums">Routes stay verified up to {fmtCm(result.widest_route_cm, inches)} wide.</p>
+            )}
             <p className="mt-1 text-xs opacity-80">Planner analysis in {result.elapsed_ms} ms on a {result.grid_cm} cm grid.</p>
           </div>
           <ul className={`flex flex-col gap-2 ${stale ? "opacity-60" : ""}`}>

@@ -77,9 +77,9 @@ export function AlternativesPanel({ result, stale, scenario, previewId, onPrevie
                 {alt.moves.length
                   ? alt.moves.map((m) => <li key={m.object_id}>{describe(m, object(m.object_id))}</li>)
                   : <li>Nothing needs to move.</li>}
-                {alt.cost.widest_route_cm !== null && (
+                {alt.validation.widest_route_cm !== null && (
                   <li className="tabular-nums text-slate-700">
-                    Widest route {alt.cost.widest_route_cm} cm (you need {scenario.requirements.route_width_cm} cm)
+                    Widest route {alt.validation.widest_route_cm} cm (you need {scenario.requirements.route_width_cm} cm)
                   </li>
                 )}
                 <li className="tabular-nums text-slate-500">Required route length {alt.cost.route_length_cm} cm</li>

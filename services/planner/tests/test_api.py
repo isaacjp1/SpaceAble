@@ -26,6 +26,15 @@ def test_analyze_canonical_and_layout_override():
     assert body["routes"][0]["polyline"] and body["routes"][0]["length_cm"] > 0
 
 
+def test_analyze_reports_the_widest_route_only_for_a_passing_layout():
+    assert client.post("/v1/planner/analyze", json={"scenario": SCENARIO}).json()[
+        "widest_route_cm"] is None  # the sample fails
+    moved = {"object_positions": [{"object_id": "dresser", "x_cm": 90, "y_cm": 300}]}
+    body = client.post("/v1/planner/analyze",
+                       json={"scenario": SCENARIO, "layoutOverride": moved}).json()
+    assert body["widest_route_cm"] >= SCENARIO["requirements"]["route_width_cm"]
+
+
 def test_unknown_object_in_override_is_rejected():
     bad = {"object_positions": [{"object_id": "piano", "x_cm": 0, "y_cm": 0}]}
     r = client.post("/v1/planner/analyze", json={"scenario": SCENARIO, "layoutOverride": bad})

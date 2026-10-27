@@ -207,6 +207,9 @@ class ValidationResult(Model):
     warnings: list[str] = Field(default_factory=list)
     grid_cm: float
     elapsed_ms: float
+    # Widest route width at which this layout still passes. Filled for passing layouts by the
+    # analyze endpoint and the optimizer; analyze() leaves it None so search stays fast.
+    widest_route_cm: float | None = None
 
 
 class Move(Model):
@@ -225,7 +228,6 @@ class Cost(Model):
     displacement_cm: float
     route_length_cm: float  # sum over required routes
     total_score: float  # lower is better; weights are engineering defaults (optimize.py)
-    widest_route_cm: float | None = None  # widest route width at which analyze still passes
 
 
 class Alternative(Model):

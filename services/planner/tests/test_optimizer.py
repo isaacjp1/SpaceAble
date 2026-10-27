@@ -9,7 +9,7 @@ from app.optimize import _near_duplicate, optimize, widest_route
 from helpers import dest, load, make, obj
 
 OPTS = OptimizeOptions()
-VOLATILE = {"elapsed_ms"}
+VOLATILE = {"elapsed_ms", "widest_route_cm"}  # widest is added after analyze()
 
 
 def stable(v):
@@ -147,12 +147,12 @@ def test_max_clearance_ranks_by_verified_width():
     s.requirements.optimization_profile = "max_clearance"
     r = optimize(s, OPTS)
     assert r.status == "solutions_found" and r.warnings == []
-    widths = [a.cost.widest_route_cm for a in r.alternatives]
+    widths = [a.validation.widest_route_cm for a in r.alternatives]
     assert widths == sorted(widths, reverse=True)
     fewest = optimize(load("canonical-bedroom"), OPTS).alternatives
-    assert widths[0] >= max(a.cost.widest_route_cm for a in fewest)
+    assert widths[0] >= max(a.validation.widest_route_cm for a in fewest)
     for i, a in enumerate(r.alternatives):
-        assert _at_width(apply_layout(s, a.layout), a.cost.widest_route_cm).status == "pass"
+        assert _at_width(apply_layout(s, a.layout), a.validation.widest_route_cm).status == "pass"
         for wider in r.alternatives[:i]:  # never more pieces moved for no extra width
             assert not {m.object_id for m in wider.moves} <= {m.object_id for m in a.moves}
 
@@ -163,7 +163,7 @@ def test_max_clearance_on_a_passing_layout_only_offers_wider_routes():
     current = widest_route(s)
     r = optimize(s, OPTS)
     assert r.status == "solutions_found" and r.alternatives
-    assert all(a.moves and a.cost.widest_route_cm > current for a in r.alternatives)
+    assert all(a.moves and a.validation.widest_route_cm > current for a in r.alternatives)
     assert f"{current:g} cm" in r.message
 
 
@@ -174,4 +174,4 @@ def test_max_clearance_keeps_the_current_layout_when_nothing_can_move():
     r = optimize(s, OPTS)
     (alt,) = r.alternatives
     assert r.status == "solutions_found" and alt.id == "current"
-    assert alt.cost.widest_route_cm == widest_route(s)
+    assert alt.validation.widest_route_cm == widest_route(s)

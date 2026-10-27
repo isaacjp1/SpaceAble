@@ -142,6 +142,7 @@ export interface ValidationResult {
   warnings: string[];
   grid_cm: number;
   elapsed_ms: number;
+  widest_route_cm: number | null; // widest route width at which the planner still passes this layout
 }
 
 export interface ApiError {
@@ -164,10 +165,7 @@ export interface Alternative {
   layout: Layout;
   moves: Move[];
   validation: ValidationResult;
-  cost: {
-    moved_objects: number; displacement_cm: number; route_length_cm: number; total_score: number;
-    widest_route_cm: number | null; // widest route width at which the planner still passes this layout
-  };
+  cost: { moved_objects: number; displacement_cm: number; route_length_cm: number; total_score: number };
 }
 
 export type OptimizeStatus =
