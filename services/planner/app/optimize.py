@@ -181,9 +181,19 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
                     + " ".join(c.message for c in fails))
 
     r = req.route_width_cm / 2
-    start = routing.entry_point(scenario.start_door(), scenario.room, r)
+    door = scenario.start_door()
+    start = routing.entry_point(door, scenario.room, r)
     by_id = {o.id: o for o in scenario.objects}
     fixed_rects = [footprint(o) for o in scenario.objects if o.id not in mover_ids]
+    # Every route starts at the entry, so fixed pieces crowding it rule out any placement.
+    # (The stripped analysis misses this when all required destinations belong to movers.)
+    if routing.component_at(routing.free_space(scenario.room, fixed_rects, r), start) is None:
+        near = [o.id for o in scenario.objects
+                if o.id not in mover_ids and footprint(o).distance(Point(start)) < r]
+        return done("discretized_search_infeasible", "Moving furniture cannot fix this under the "
+                    f"current geometric model: the entry point inside {door.id} has less than "
+                    f"{2 * r:g} cm of clearance because of "
+                    f"{', '.join(near) + ' (fixed or locked)' if near else 'the walls'}.")
     req_dests = [d for d in scenario.destinations if d.id in required]
     fixed_targets = [approach_rect(d, by_id[d.object_id]) for d in req_dests
                      if d.object_id not in mover_ids]

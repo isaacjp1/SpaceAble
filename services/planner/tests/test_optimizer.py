@@ -116,3 +116,15 @@ def test_optimize_endpoint():
     assert r.status_code == 200 and r.json()["status"] == "solutions_found"
     r = client.post("/v1/planner/optimize", json={**body, "options": {"time_limit_s": 0.1}})
     assert r.status_code == 422 and r.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_entry_blocked_by_locked_furniture_is_explained_not_searched():  # found by the benchmark
+    # Locked bed against the door wall; the only required destination belongs to a mover.
+    s = make([obj("bed", 0, 120, 140, 200), obj("desk", 300, 40, 120, 60),
+              obj("chair", 300, 200, 50, 50)], [dest("d", "desk", "bottom")], room=(500, 320),
+             doors=[{"id": "door", "wall": "left", "offset_cm": 165, "clear_width_cm": 85,
+                     "confirmed": True}], route=90)
+    s.requirements.locked_object_ids = ["bed"]
+    r = optimize(s, OPTS)
+    assert r.status == "discretized_search_infeasible"
+    assert "bed" in r.message and r.search.combinations_considered == 0

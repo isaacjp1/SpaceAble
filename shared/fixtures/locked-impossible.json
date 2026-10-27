@@ -1,0 +1,65 @@
+{
+  "id": "locked-impossible",
+  "version": 1,
+  "units": "cm",
+  "title": "Small room: the only movable box has nowhere valid to go",
+  "room": {
+    "width_cm": 300,
+    "height_cm": 200
+  },
+  "doors": [
+    {
+      "id": "door-1",
+      "wall": "left",
+      "offset_cm": 55,
+      "clear_width_cm": 90,
+      "confirmed": true
+    }
+  ],
+  "objects": [
+    {
+      "id": "desk",
+      "label": "Desk",
+      "kind": "desk",
+      "x_cm": 240,
+      "y_cm": 50,
+      "width_cm": 60,
+      "height_cm": 100,
+      "rotation_deg": 0,
+      "movable": false,
+      "confirmed": true
+    },
+    {
+      "id": "box",
+      "label": "Storage box",
+      "kind": "other",
+      "x_cm": 100,
+      "y_cm": 50,
+      "width_cm": 100,
+      "height_cm": 100,
+      "rotation_deg": 0,
+      "movable": true,
+      "confirmed": true
+    }
+  ],
+  "destinations": [
+    {
+      "id": "desk-approach",
+      "object_id": "desk",
+      "side": "left",
+      "approach_width_cm": 80,
+      "approach_depth_cm": 90,
+      "required": true
+    }
+  ],
+  "requirements": {
+    "route_width_cm": 80,
+    "door_min_clear_width_cm": 80,
+    "turning_diameter_cm": null,
+    "required_destination_ids": [
+      "desk-approach"
+    ],
+    "locked_object_ids": [],
+    "optimization_profile": "minimal_changes"
+  }
+}

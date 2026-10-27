@@ -1,0 +1,89 @@
+{
+  "id": "narrow-corridor",
+  "version": 1,
+  "units": "cm",
+  "title": "Fixed 70 cm gap between built-ins (route needs 80 cm)",
+  "room": {
+    "width_cm": 600,
+    "height_cm": 300
+  },
+  "doors": [
+    {
+      "id": "door-1",
+      "wall": "left",
+      "offset_cm": 100,
+      "clear_width_cm": 90,
+      "confirmed": true
+    }
+  ],
+  "objects": [
+    {
+      "id": "wall-a",
+      "label": "Built-in wall",
+      "kind": "obstacle",
+      "x_cm": 250,
+      "y_cm": 0,
+      "width_cm": 100,
+      "height_cm": 115.0,
+      "rotation_deg": 0,
+      "movable": false,
+      "confirmed": true
+    },
+    {
+      "id": "wall-b",
+      "label": "Built-in wall",
+      "kind": "obstacle",
+      "x_cm": 250,
+      "y_cm": 185.0,
+      "width_cm": 100,
+      "height_cm": 115.0,
+      "rotation_deg": 0,
+      "movable": false,
+      "confirmed": true
+    },
+    {
+      "id": "desk",
+      "label": "Desk",
+      "kind": "desk",
+      "x_cm": 520,
+      "y_cm": 100,
+      "width_cm": 60,
+      "height_cm": 100,
+      "rotation_deg": 0,
+      "movable": false,
+      "confirmed": true
+    },
+    {
+      "id": "chair",
+      "label": "Chair",
+      "kind": "chair",
+      "x_cm": 60,
+      "y_cm": 230,
+      "width_cm": 50,
+      "height_cm": 50,
+      "rotation_deg": 0,
+      "movable": true,
+      "confirmed": true
+    }
+  ],
+  "destinations": [
+    {
+      "id": "desk-approach",
+      "object_id": "desk",
+      "side": "left",
+      "approach_width_cm": 80,
+      "approach_depth_cm": 90,
+      "required": true
+    }
+  ],
+  "requirements": {
+    "route_width_cm": 80,
+    "door_min_clear_width_cm": 80,
+    "turning_diameter_cm": null,
+    "required_destination_ids": [
+      "desk-approach"
+    ],
+    "locked_object_ids": [],
+    "optimization_profile": "minimal_changes"
+  }
+}

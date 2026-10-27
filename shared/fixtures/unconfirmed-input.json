@@ -1,0 +1,91 @@
+{
+  "id": "unconfirmed-input",
+  "version": 1,
+  "units": "cm",
+  "title": "Sample Bedroom with an unmeasured dresser",
+  "room": {
+    "width_cm": 430,
+    "height_cm": 360
+  },
+  "doors": [
+    {
+      "id": "door-1",
+      "wall": "left",
+      "offset_cm": 35,
+      "clear_width_cm": 90,
+      "entry_anchor": {
+        "x": 46,
+        "y": 80
+      },
+      "confirmed": true
+    }
+  ],
+  "objects": [
+    {
+      "id": "bed",
+      "label": "Bed",
+      "kind": "bed",
+      "x_cm": 260,
+      "y_cm": 65,
+      "width_cm": 150,
+      "height_cm": 200,
+      "rotation_deg": 0,
+      "movable": false,
+      "confirmed": true
+    },
+    {
+      "id": "desk",
+      "label": "Desk",
+      "kind": "desk",
+      "x_cm": 115,
+      "y_cm": 35,
+      "width_cm": 110,
+      "height_cm": 65,
+      "rotation_deg": 0,
+      "movable": true,
+      "confirmed": true
+    },
+    {
+      "id": "dresser",
+      "label": "Dresser",
+      "kind": "dresser",
+      "x_cm": 90,
+      "y_cm": 165,
+      "width_cm": 100,
+      "height_cm": 50,
+      "rotation_deg": 0,
+      "movable": true,
+      "confirmed": false
+    }
+  ],
+  "destinations": [
+    {
+      "id": "desk-approach",
+      "object_id": "desk",
+      "side": "bottom",
+      "approach_width_cm": 80,
+      "approach_depth_cm": 90,
+      "required": true
+    },
+    {
+      "id": "bed-approach",
+      "object_id": "bed",
+      "side": "left",
+      "approach_width_cm": 80,
+      "approach_depth_cm": 90,
+      "required": false
+    }
+  ],
+  "requirements": {
+    "route_width_cm": 80,
+    "door_min_clear_width_cm": 80,
+    "turning_diameter_cm": null,
+    "required_destination_ids": [
+      "desk-approach"
+    ],
+    "locked_object_ids": [
+      "bed"
+    ],
+    "optimization_profile": "minimal_changes"
+  }
+}
