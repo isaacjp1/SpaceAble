@@ -91,12 +91,14 @@ describe("explanations", () => {
     expect(text).toContain("Verified 80 cm route");
     expect(text).toContain("option 1 of 1, ranked by fewest changes");
     expect(text).toContain("Routes stay verified up to 99 cm wide.");
+    expect(text).toContain("Not moved (kept in place or fixed): Bed.");
     expect(checkExplanation(text, evidence)).toEqual({ ok: true });
   });
 
   it("carries the widest route and ranking so Muse can quote them", () => {
     expect(evidence.after?.widest_route_cm).toBe(99);
     expect(evidence.option).toEqual({ rank: 1, of: 1, moved_objects: 1, route_length_cm: 100.8 });
+    expect(evidence.requirements).toMatchObject({ kept_in_place: ["Bed"], fixed_furniture: ["Bed"] });
     expect(checkExplanation("After the move, the route stays verified up to 99 cm wide; you need 80 cm.",
       evidence)).toEqual({ ok: true });
   });

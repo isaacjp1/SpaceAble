@@ -21,7 +21,7 @@ const proposal = {
 };
 const evidence = {
   requirements: { route_width_cm: 80, door_min_clear_width_cm: 80, turning_diameter_cm: null,
-    optimization_profile: "minimal_changes" },
+    optimization_profile: "minimal_changes", kept_in_place: ["Bed"], fixed_furniture: [] },
   before: { status: "fail", checks: [{ id: "route-door-1-to-desk-approach", status: "fail", required: true,
     measured_cm: null, required_cm: 80, message: "No verified 80 cm route from door-1." }],
     widest_route_cm: null, warnings: [] },

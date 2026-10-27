@@ -123,6 +123,8 @@ export const EvidenceSchema = z.strictObject({
     door_min_clear_width_cm: z.number().nullable(),
     turning_diameter_cm: z.number().nullable(),
     optimization_profile: z.enum(PROFILES),
+    kept_in_place: z.array(z.string().max(80)).max(40), // labels the person locked
+    fixed_furniture: z.array(z.string().max(80)).max(40), // labels marked as not movable
   }),
   before: ResultEvidence,
   after: ResultEvidence.nullable(),
@@ -155,8 +157,13 @@ export function buildEvidence(s: RoomScenario, before: ValidationResult, opt: Op
     warnings: v.warnings.slice(0, 5).map((w) => w.slice(0, 400)),
   });
   const { route_width_cm, door_min_clear_width_cm, turning_diameter_cm, optimization_profile } = s.requirements;
+  const label = (id: string) => s.objects.find((o) => o.id === id)?.label ?? id;
   return {
-    requirements: { route_width_cm, door_min_clear_width_cm, turning_diameter_cm, optimization_profile },
+    requirements: {
+      route_width_cm, door_min_clear_width_cm, turning_diameter_cm, optimization_profile,
+      kept_in_place: s.requirements.locked_object_ids.map(label),
+      fixed_furniture: s.objects.filter((o) => !o.movable).map((o) => o.label),
+    },
     before: result(before),
     after: alt && result(alt.validation),
     moves: (alt?.moves ?? []).map((m) => ({
@@ -189,7 +196,9 @@ export function explainMessages(e: Evidence) {
         "is null it was not measured (for example because the layout fails): do not mention it. option " +
         "says where the proposed layout ranks among the options, ranked by " +
         "requirements.optimization_profile (minimal_changes = fewest changes, max_clearance = widest " +
-        "route). search summarises the search for rearrangements, including why it found none; if it " +
+        "route). requirements.kept_in_place lists furniture the person asked to keep where it is and " +
+        "fixed_furniture lists pieces marked as fixed; the search never moves either. search " +
+        "summarises the search for rearrangements, including why it found none; if it " +
         "found options but none is proposed, say they can preview one. Cover what the person most " +
         "needs to know: whether it passes, what blocks it or what moves, how much room the route " +
         "leaves, and what is still unknown. Use numbers exactly as they appear in the evidence, in cm, " +
@@ -227,12 +236,15 @@ export function templateExplanation(e: Evidence): string {
   const option = e.option
     ? ` (option ${e.option.rank} of ${e.option.of}, ranked by ${RANKED_BY[e.requirements.optimization_profile]})`
     : "";
+  const { kept_in_place, fixed_furniture } = e.requirements;
+  const kept = [...new Set([...kept_in_place, ...fixed_furniture])];
   const parts = e.after
     ? ["Before:", ...summary(e.before),
       `Proposed change${option}: ${e.moves.map((m) => `move ${m.label} ${m.distance_cm} cm` +
         (m.turned_to_deg !== null ? ` and turn it to ${m.turned_to_deg}°` : "")).join("; ")}.`,
       "After:", ...summary(e.after)]
     : ["Current layout:", ...summary(e.before), ...searchSummary(e)];
+  if (kept.length && (e.after || e.search)) parts.push(`Not moved (kept in place or fixed): ${kept.join(", ")}.`);
   parts.push("This uses simplified 2D geometry and is not an accessibility certification or a safety " +
     "guarantee; check it in person.");
   return parts.join(" ");
