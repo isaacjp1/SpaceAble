@@ -144,6 +144,12 @@ The web app validates user-edited/imported scenarios with Zod
   published). Output is special-token text, parsed with `@meta-sam/parser`
   (`parseImageStream`, `recordsOfKind`, `decodeMaskToRaster`). Zero records is a
   valid "no matches".
+- Muse Spark tool calling: Chat Completions `tools` (`type: "function"`, `strict` optional).
+  `tool_choice` accepts only `"auto"`. The full assistant message, including `tool_calls`, must be
+  sent back before the `role: "tool"` results.
+- Muse Voice Transcribe (`muse-voice-transcribe-1.0`): `POST /v1/asr/transcribe`, multipart with a JSON
+  `request` part (`mode`, `model`, `audioEncoding`, `keywords`) and an `audio` part. Only RIFF/WAVE,
+  mono 16-bit PCM at 16 or 24 kHz; at most 10 minutes and 32 MB.
 
 Live-verified 2026-10-26 with `npm run smoke:meta`:
 - Muse: `chat.completions.create` with `response_format.json_schema` returned schema-valid JSON
@@ -152,6 +158,16 @@ Live-verified 2026-10-26 with `npm run smoke:meta`:
 - SAM: `responses.create({stream: true, metadata: {mask_encoding: "one_bit"}})` with a base64 JPEG
   data URL. The parser outcome was `completed` with 0 diagnostics. On the CC0 sample photo, "bed" gave
   2 matches and "desk" gave 1, and the box coordinates line up with the photo.
+
+Live-verified 2026-10-27 with `npm run smoke:meta -- speech.wav`:
+- Tool calling: with two strict function tools, Muse made both calls in parallel in one turn
+  (`check_layout({"route_width_cm":91.0})`, `find_layouts({"locked_object_ids":["bed"]})`), then
+  answered from the canned results in a second turn. About 1.5 s per turn at `reasoning_effort: "low"`.
+  The assistant message carries no reasoning field, so nothing beyond the message itself is replayed.
+  Unprompted, the answer used markdown and quoted raw IDs.
+- Transcribe: a 4.2 s, 16 kHz mono WAV (three spoken words) returned 200 in 1.4 s with
+  `{"sessionId", "transcript": "wheelchair. desk. furniture.", "audioDurationMs": 4160, "turns": []}`.
+  `turns` is empty in `PUSH_TO_TALK` mode.
 
 ### In the product
 

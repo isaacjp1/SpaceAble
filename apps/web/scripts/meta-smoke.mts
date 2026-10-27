@@ -1,16 +1,21 @@
-// Live smoke test for the two Meta capabilities. Makes real, billed API calls.
-//   npm run smoke:meta -- [path/to/consented-room-photo.jpg] [concept]
+// Live smoke test for the Meta capabilities. Makes real, billed API calls.
+//   npm run smoke:meta -- [path/to/consented-room-photo.jpg] [concept] [path/to/speech.wav]
 // Reads MODEL_API_KEY from apps/web/.env.local. Prints what the API actually returned.
 import { readFileSync } from "node:fs";
 import { decodeMaskToRaster, parseImageStream, recordsOfKind } from "@meta-sam/parser";
 import OpenAI from "openai";
+import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 
 const key = process.env.MODEL_API_KEY;
 if (!key) {
   console.error("META_NOT_CONFIGURED: set MODEL_API_KEY in apps/web/.env.local (see .env.example).");
   process.exit(2);
 }
-const client = new OpenAI({ baseURL: process.env.META_BASE_URL ?? "https://api.meta.ai/v1", apiKey: key });
+const baseURL = process.env.META_BASE_URL ?? "https://api.meta.ai/v1";
+const client = new OpenAI({ baseURL, apiKey: key });
+const args = process.argv.slice(2);
+const wavPath = args.find((a) => /\.wav$/i.test(a));
+const [imagePath, concept = "bed"] = args.filter((a) => a !== wavPath);
 
 // 1. Muse Spark: schema-constrained output (Chat Completions + response_format json_schema)
 const muse = await client.chat.completions.create({
@@ -43,8 +48,76 @@ console.log("Muse model:", muse.model, "| usage:", JSON.stringify(muse.usage));
 console.log("Muse content:", content);
 console.log("Muse parsed:", JSON.parse(content));
 
-// 2. SAM 3.1: one concept, local image sent as a base64 data URL (never published)
-const [imagePath, concept = "bed"] = process.argv.slice(2);
+// 2. Muse Spark tool calling: one round of (possibly parallel) calls with canned results, then
+// the answer. The full assistant message (including tool_calls) goes back into the history.
+const tools: ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "check_layout",
+      description: "Check the current layout against a route width. Returns pass/fail evidence.",
+      parameters: {
+        type: "object", properties: { route_width_cm: { type: "number" } },
+        required: ["route_width_cm"], additionalProperties: false,
+      },
+      strict: true,
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_layouts",
+      description: "Search for verified rearrangements that keep the listed pieces in place.",
+      parameters: {
+        type: "object",
+        properties: { locked_object_ids: { type: "array", items: { type: "string", enum: ["bed", "desk", "dresser"] } } },
+        required: ["locked_object_ids"], additionalProperties: false,
+      },
+      strict: true,
+    },
+  },
+];
+const messages: ChatCompletionMessageParam[] = [
+  { role: "system", content: "You answer questions about a room using only the tool results. Quote numbers exactly." },
+  { role: "user", content: "I need a 91 cm route to my desk and the bed must stay put. Does my room work as it is, and if not, what could I move?" },
+];
+const toolResult = (name: string) => JSON.stringify(name === "check_layout"
+  ? { status: "fail", checks: [{ id: "route-door-1-to-desk-approach", status: "fail", required_cm: 91 }] }
+  : { status: "solutions_found", alternatives: [{ moves: [{ label: "Dresser", distance_cm: 35 }], widest_route_cm: 104 }] });
+let t0 = Date.now();
+const turn1 = await client.chat.completions.create({
+  model: process.env.META_MUSE_MODEL ?? "muse-spark-1.3", messages, tools,
+  reasoning_effort: "low", max_completion_tokens: 4000,
+});
+const m1 = turn1.choices[0].message;
+const calls = (m1.tool_calls ?? []).flatMap((c) => c.type === "function" ? [c] : []);
+console.log(`Tools turn 1: ${Date.now() - t0} ms | finish: ${turn1.choices[0].finish_reason} | message keys: ${Object.keys(m1)}`);
+for (const c of calls) console.log(`  call ${c.function.name}(${c.function.arguments})`);
+messages.push(m1, ...calls.map((c) => ({ role: "tool" as const, tool_call_id: c.id, content: toolResult(c.function.name) })));
+t0 = Date.now();
+const turn2 = await client.chat.completions.create({
+  model: process.env.META_MUSE_MODEL ?? "muse-spark-1.3", messages, tools,
+  reasoning_effort: "low", max_completion_tokens: 4000,
+});
+console.log(`Tools turn 2: ${Date.now() - t0} ms | finish: ${turn2.choices[0].finish_reason} | more calls: ${turn2.choices[0].message.tool_calls?.length ?? 0}`);
+console.log("  answer:", turn2.choices[0].message.content);
+
+// 3. Muse Voice Transcribe: mono 16-bit PCM WAV (16 or 24 kHz), multipart with a JSON request part
+if (wavPath) {
+  const form = new FormData();
+  form.append("request", new Blob([JSON.stringify({
+    mode: "PUSH_TO_TALK", model: "muse-voice-transcribe-1.0", audioEncoding: "WAV",
+    keywords: ["wheelchair", "desk", "dresser"],
+  })], { type: "application/json" }));
+  form.append("audio", new Blob([readFileSync(wavPath)], { type: "audio/wav" }), "speech.wav");
+  t0 = Date.now();
+  const res = await fetch(`${baseURL}/asr/transcribe`, {
+    method: "POST", headers: { authorization: `Bearer ${key}` }, body: form,
+  });
+  console.log(`Transcribe: ${res.status} in ${Date.now() - t0} ms |`, await res.text());
+}
+
+// 4. SAM 3.1: one concept, local image sent as a base64 data URL (never published)
 if (!imagePath) {
   console.log("SAM: skipped (pass a consented image path to test segmentation).");
   process.exit(0);
