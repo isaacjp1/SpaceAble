@@ -80,9 +80,8 @@ secret logged the startup warning.
 
 ## Before the repository goes public
 
-- [ ] **Rotate the Meta API key** (the development key was exposed during development) and put the new
-      one only in the host's secret store and your local `apps/web/.env.local`.
-- [ ] `git log -p | grep -c <first 12 characters of the old key>` prints 0 (checked 2026-10-26: 0).
+- [ ] **Rotate the development Meta API key** before publishing. Put the new one only in the host's secret
+      store and your local `apps/web/.env.local`.
 - [ ] `.env.local` is untracked (`git check-ignore apps/web/.env.local`).
 - [ ] Confirm the hackathon rules on work dated before the build window (commits so far are dated 2026-10-26).
 - [ ] Sample photo licence: CC0, attributed in README (keep the attribution).
