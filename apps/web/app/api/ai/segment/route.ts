@@ -3,6 +3,9 @@ import { apiError } from "@/lib/planner";
 import { CONCEPT, MAX_IMAGE_BYTES, MAX_IMAGE_SIDE, imageInfo, segment } from "@/lib/sam";
 
 // The photo is held in memory for this request only: never written, logged or cached.
+// Hosting platforms read this; the default function timeout is too short for these calls.
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   const limited = rateLimited(req);
   if (limited) return limited;

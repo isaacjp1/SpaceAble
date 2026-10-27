@@ -6,6 +6,9 @@ import { apiError } from "@/lib/planner";
 const Body = z.strictObject({ evidence: EvidenceSchema });
 
 // Always answers: Muse's text when it passes the grounding check, otherwise the labelled template.
+// Hosting platforms read this; the default function timeout is too short for these calls.
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   const limited = rateLimited(req);
   if (limited) return limited;

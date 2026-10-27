@@ -22,6 +22,9 @@ from .optimize import optimize
 MAX_BODY_BYTES = 512 * 1024
 
 log = logging.getLogger("planner")
+if not os.environ.get("PLANNER_SHARED_SECRET"):
+    log.warning("PLANNER_SHARED_SECRET is not set: the planner accepts unauthenticated requests. "
+                "Fine for local development; set it in production.")
 app = FastAPI(title="SpaceAble planner", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,

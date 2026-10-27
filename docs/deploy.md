@@ -15,7 +15,7 @@ Railway and similar.
 
 | Variable | Value |
 | --- | --- |
-| `PLANNER_SHARED_SECRET` | **Required in production.** A long random string, e.g. `python -c "import secrets;print(secrets.token_urlsafe(32))"`. Every route except `/health` returns 401 without it. |
+| `PLANNER_SHARED_SECRET` | **Required in production.** A long random string, e.g. `python -c "import secrets;print(secrets.token_urlsafe(32))"`. Every route except `/health` returns 401 without it. If it is unset, the planner logs a warning at startup and accepts every request. |
 | `PLANNER_CORS_ORIGINS` | The web app's origin. The browser never calls the planner directly, so this is defence in depth only. |
 | `PORT` | Usually set by the host. |
 
@@ -34,6 +34,12 @@ limit (default 10 s, max 30 s) of a single core.
 | `PLANNER_SHARED_SECRET` | The same value as on the planner. |
 | `MODEL_API_KEY` | Meta Model API key, server-side only. Never prefix it with `NEXT_PUBLIC_`. |
 | `META_BASE_URL`, `META_MUSE_MODEL`, `META_SAM_MODEL` | Optional overrides (defaults in `.env.example`). |
+
+Slow routes (optimize, explain, segment, parse-request) export `maxDuration = 60`. Confirm your plan allows
+60 s functions; otherwise optimize (up to its time limit) and explain (11–17 s live) can be cut off.
+Vercel also caps request bodies at about 4.5 MB. That's below the server's 5 MB photo limit, but the
+browser re-encodes photos to at most 1600 px JPEG (a few hundred KB) before upload, so real uploads stay
+well under it.
 
 The AI and planner routes rate-limit per client IP in memory. On many instances, move that state to a
 shared store (see the note in `lib/meta.ts`). The client IP comes from `x-forwarded-for`.

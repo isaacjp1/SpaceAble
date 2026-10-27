@@ -7,6 +7,9 @@ import { RoomScenarioSchema } from "@/lib/schema";
 const Body = z.strictObject({ scenario: RoomScenarioSchema, userText: z.string().trim().min(3).max(1000) });
 
 // Muse proposes constraints for the user to review. Nothing is applied here.
+// Hosting platforms read this; the default function timeout is too short for these calls.
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   const limited = rateLimited(req);
   if (limited) return limited;
