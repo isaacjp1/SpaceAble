@@ -1,0 +1,16 @@
+# Render Blueprint for the planner API. The web app is deployed separately (Vercel); see docs/deploy.md.
+services:
+  - type: web
+    name: spaceable-planner
+    runtime: docker
+    plan: 0.5c-512mb # the free plan sleeps when idle, which makes the first demo request slow
+    region: oregon
+    rootDir: services/planner
+    dockerfilePath: ./services/planner/Dockerfile
+    dockerContext: ./services/planner
+    healthCheckPath: /health
+    envVars:
+      - key: PLANNER_SHARED_SECRET
+        generateValue: true # copy this value into the web app's PLANNER_SHARED_SECRET
+      - key: PLANNER_CORS_ORIGINS
+        sync: false # the web app's origin, e.g. https://spaceable.vercel.app

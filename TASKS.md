@@ -68,7 +68,7 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Clean README, screenshots (from a production build), license, tests
 - [x] Planner shared secret, proxy rate limits, security headers, non-root container user (tests)
 - [x] Local production rehearsal: non-editable planner install with secret + `next build && next start` (docs/deploy.md)
-- [ ] Build the Docker image (needs Docker Desktop WSL integration)
+- [x] Build and run the Docker image (non-root, 401 without secret, optimize OK with it); `render.yaml` blueprint
 - [ ] Deploy web + planner (needs hosting accounts) and verify `/api/health` + 401 on the bare planner
 - [ ] Rotate the Meta key, then create the public GitHub repo and push
 - [ ] ≤3-minute demo recording (`docs/demo-script.md`)

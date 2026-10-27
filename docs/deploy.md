@@ -7,7 +7,13 @@ browser ──► Next.js app (Vercel or any Node host) ──x-planner-secret�
                          └──MODEL_API_KEY──► Meta Model API
 ```
 
-## 1. Planner (container)
+## 1. Planner (container on Render)
+
+`render.yaml` at the repo root is a Render Blueprint. In Render choose **New → Blueprint**, pick the
+repository, and enter the web app's origin for `PLANNER_CORS_ORIGINS` when prompted. Render generates
+`PLANNER_SHARED_SECRET`; copy it into the web app's environment. The plan is set to `0.5c-512mb`
+because the free plan sleeps when idle.
+
 
 `services/planner/Dockerfile` builds a Python 3.12 image that runs as a non-root user and listens on `$PORT`
 (default 8000). It works on any container host with native Shapely wheels: Cloud Run, Render, Fly.io,
@@ -67,7 +73,10 @@ secret set. The web app was run with `next build && next start` and the planner 
 - responses carried `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy` and
   `Permissions-Policy`, and no `X-Powered-By`.
 
-The Docker image itself has not been built yet.
+Docker image, built and run locally the same day (`docker build services/planner`):
+356 MB, runs as the non-root `planner` user. `/health` was open and optimize returned 401 without the
+secret. With it, optimize returned 3 verified alternatives (0.09 s). A container started without the
+secret logged the startup warning.
 
 ## Before the repository goes public
 
