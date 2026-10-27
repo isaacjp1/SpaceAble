@@ -137,7 +137,7 @@ export function RequestPanel({ scenario, update, metaConfigured }: {
               onChange={(e) => edit({ optimization_profile: e.target.value as Proposal["optimization_profile"] })}
               className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900">
               <option value="minimal_changes">Fewest changes</option>
-              <option value="max_clearance">Most open space (not implemented yet; ranks by fewest changes)</option>
+              <option value="max_clearance">Most open space (widest route)</option>
             </select>
           </label>
           {review.proposal.clarifying_questions.length > 0 && (

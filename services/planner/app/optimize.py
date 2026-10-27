@@ -43,6 +43,10 @@ ROUTE_LENGTH_WEIGHT = 0.05  # per cm of required route, applied after validation
 MAX_CANDIDATES_PER_OBJECT = 120
 MAX_MOVED_OBJECTS = 3
 DIVERSITY_CM = 60.0  # alternatives must differ by more than this for some object
+# Limit: max_clearance ranks the first CLEARANCE_POOL verified layouts found in cost order, so
+# it is the widest of the cheapest layouts, not the widest possible one. Raise it, or search
+# by width, if that matters.
+CLEARANCE_POOL = 12
 
 
 @dataclass(frozen=True)
@@ -128,15 +132,58 @@ def _route_length(v: ValidationResult, required: set[str]) -> float:
     return sum(rt.length_cm or 0.0 for rt in v.routes if rt.destination_id in required)
 
 
+def _last_true(pred, hi: int) -> int:
+    """Largest k in [0, hi] with pred(k), given pred(0) and that pred only turns false."""
+    lo = 0
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if pred(mid):
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
+def widest_route(scenario: RoomScenario) -> float | None:
+    """Widest route width, in 1 cm steps above the required one, at which `analyze` passes.
+
+    For a layout that already passes. A polygon test (the entry's free-space component
+    touches every required approach zone) bounds the width; `analyze` must pass at the
+    reported width, otherwise it is lowered until it does.
+    """
+    req, room, door = scenario.requirements, scenario.room, scenario.start_door()
+    if not req.route_width_cm or door is None or door.clear_width_cm is None:
+        return None
+    rects = [footprint(o) for o in scenario.objects]
+    by_id = {o.id: o for o in scenario.objects}
+    targets = [approach_rect(d, by_id[d.object_id]) for d in scenario.destinations
+               if d.id in req.required_destination_ids]
+
+    def connected(w: float) -> bool:
+        r = w / 2
+        comp = routing.component_at(routing.free_space(room, rects, r),
+                                    routing.entry_point(door, room, r))
+        return comp is not None and all(comp.intersection(t).area > EPS for t in targets)
+
+    def passes(w: float) -> bool:
+        wider = req.model_copy(update={"route_width_cm": w})
+        return analyze(scenario.model_copy(update={"requirements": wider})).status == "pass"
+
+    base = req.route_width_cm
+    steps = _last_true(lambda k: connected(base + k),
+                       max(0, int(min(room.width_cm, room.height_cm) - base)))
+    if steps and not passes(base + steps):
+        steps = _last_true(lambda k: passes(base + k), steps - 1)
+    return round(base + steps, 2)
+
+
 def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationResult:
     t0 = perf_counter()
     req = scenario.requirements
     required = set(req.required_destination_ids)
     baseline = analyze(scenario)
     warnings: list[str] = []
-    if req.optimization_profile == "max_clearance":
-        warnings.append("The max_clearance profile is not implemented yet; alternatives are "
-                        "ranked by minimal changes.")
+    by_width = req.optimization_profile == "max_clearance"
     tested = considered = 0
     exhaustive = False
 
@@ -148,19 +195,26 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
                 elapsed_s=round(perf_counter() - t0, 3), combinations_considered=considered,
                 candidates_tested=tested, exhaustive=exhaustive))
 
+    current = None
     if baseline.status == "pass":
         length = _route_length(baseline, required)
-        return done("solutions_found", "The current layout already passes; nothing needs to "
-                    "move.", [
-            Alternative(id="current", layout=Layout(), moves=[], validation=baseline,
-                        cost=Cost(moved_objects=0, displacement_cm=0, route_length_cm=length,
-                                  total_score=round(ROUTE_LENGTH_WEIGHT * length, 1)))])
+        current = Alternative(id="current", layout=Layout(), moves=[], validation=baseline,
+                              cost=Cost(moved_objects=0, displacement_cm=0, route_length_cm=length,
+                                        total_score=round(ROUTE_LENGTH_WEIGHT * length, 1),
+                                        widest_route_cm=widest_route(scenario)))
+        if not by_width:
+            return done("solutions_found", "The current layout already passes; nothing needs to "
+                        "move.", [current])
+        # max_clearance keeps searching, but only for layouts with a wider route than this one.
     blocking = [c for c in baseline.checks if c.required and c.status in ("needs_input", "unknown")]
     if blocking:
         return done("needs_input", "Resolve these before optimizing: "
                     + " ".join(c.message for c in blocking))
 
     movers = [o for o in scenario.objects if o.movable and o.id not in req.locked_object_ids]
+    if not movers and current:
+        return done("solutions_found", "The current layout already passes, and no furniture is "
+                    "allowed to move.", [current])
     if not movers:
         return done("discretized_search_infeasible", "No furniture is allowed to move. Unlock a "
                     "piece or mark it movable, then optimize again.")
@@ -208,7 +262,8 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
     first = (0,) * len(lists)
     heap, seen = [(0.0, first)], {first}
     timed_out = False
-    while heap and len(found) < options.max_alternatives:
+    pool = CLEARANCE_POOL if by_width else options.max_alternatives
+    while heap and len(found) < pool:
         if perf_counter() - t0 > options.time_limit_s:
             timed_out = True
             break
@@ -222,7 +277,7 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
                 seen.add(nxt)
                 heapq.heappush(heap, (sum(lists[j][i].cost for j, i in enumerate(nxt)), nxt))
         if moved == 0:
-            continue  # the baseline already failed
+            continue  # the unmoved layout is the baseline, analysed above
         considered += 1
         chosen = [lists[k][i] for k, i in enumerate(idx)]
         if not _compatible(chosen) or not _connected(chosen, scenario, fixed_rects,
@@ -233,7 +288,8 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
                      for k, c in enumerate(chosen) if idx[k] > 0]
         layout = Layout(object_positions=positions)
         tested += 1
-        v = analyze(apply_layout(scenario, layout))
+        moved_scenario = apply_layout(scenario, layout)
+        v = analyze(moved_scenario)
         if v.status != "pass":
             continue
         moves = [Move(object_id=c.obj.id, from_x_cm=by_id[c.obj.id].x_cm,
@@ -245,22 +301,46 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
                  for k, c in enumerate(chosen) if idx[k] > 0]
         if any(_near_duplicate(moves, alt.moves) for alt in found):
             continue
+        width = widest_route(moved_scenario)
+        if current and width <= current.cost.widest_route_cm:
+            continue
         length = _route_length(v, required)
         score = sum(c.cost for c in chosen) + ROUTE_LENGTH_WEIGHT * length
         found.append(Alternative(
             id="", layout=layout, moves=moves, validation=v,
             cost=Cost(moved_objects=len(moves), displacement_cm=sum(m.distance_cm for m in moves),
-                      route_length_cm=length, total_score=round(score, 1))))
+                      route_length_cm=length, total_score=round(score, 1),
+                      widest_route_cm=width)))
 
     exhaustive = not heap and not timed_out and not truncated and len(movers) <= MAX_MOVED_OBJECTS
-    found.sort(key=lambda a: a.cost.total_score)
+    pooled = len(found)
+    if by_width:
+        found.sort(key=lambda a: (-a.cost.widest_route_cm, a.cost.total_score))
+        kept: list[Alternative] = []
+        for a in found:  # skip options that move the same pieces or more for no extra width
+            pieces = {m.object_id for m in a.moves}
+            if not any({m.object_id for m in k.moves} <= pieces for k in kept):
+                kept.append(a)
+        found = kept[:options.max_alternatives]
+    else:
+        found.sort(key=lambda a: a.cost.total_score)
     for n, alt in enumerate(found, 1):
         alt.id = f"alternative-{n}"
     if found:
         if timed_out:
             warnings.append("The search stopped at the time limit; other alternatives may exist.")
-        return done("solutions_found", f"Found {len(found)} verified alternative"
-                    f"{'s' if len(found) > 1 else ''}.", found)
+        message = f"Found {len(found)} verified alternative{'s' if len(found) > 1 else ''}."
+        if by_width:
+            wider = (f" with a route wider than the current {current.cost.widest_route_cm:g} cm"
+                     if current else "")
+            message = (f"Found {pooled} verified layout{'s' if pooled > 1 else ''}{wider}, "
+                       "searching from the fewest changes. Showing the widest, skipping any "
+                       "that move more furniture for no extra width.")
+        return done("solutions_found", message, found)
+    if current:
+        return done("solutions_found", "The current layout already passes. No layout with a "
+                    f"route wider than its {current.cost.widest_route_cm:g} cm was found among "
+                    "those tried.", [current])
     if exhaustive:
         return done("discretized_search_infeasible", "No verified layout among the "
                     f"{options.grid_spacing_cm:g} cm grid placements tried. A valid arrangement "

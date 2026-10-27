@@ -44,6 +44,7 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Diverse ranked alternatives, budget + warnings reported
 - [x] Performance + impossible-case tests (matrix 5, 14–17)
 - [x] UI: Optimize + time limit, alternative cards, preview with before-outlines and arrows, use (Playwright)
+- [x] Most open space (`max_clearance`): widest verified route on every option, ranked widest first, manual control (pytest + Playwright)
 
 ## Meta AI features
 
@@ -52,6 +53,9 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] SAM segmentation via `@meta-sam/parser`; live-verified
 - [x] Photo overlay + object ↔ plan association UI (Playwright, mocked AI)
 - [x] Mocked tests: missing key, 429, zero matches, bogus IDs, ungrounded explanations
+- [x] Smoke script: Muse tool calling (parallel calls, two turns) and Muse Voice Transcribe (WAV) verified live 2026-10-27
+- [ ] Voice input (Muse Voice Transcribe): browser WAV, `/api/ai/transcribe`, tap-to-talk mic button
+- [ ] Muse Spark assistant: `analyze`/`optimize` as tools, no invented measurements, grounded answer, load a what-if
 
 ## Product UX and evaluation
 
@@ -59,7 +63,7 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Keyboard controls, Help & limits dialog, disclaimer, inches display, cancel, mobile layout (plan first, no horizontal scroll at 390 px)
 - [x] Save/load JSON (with selected alternative + explanation), print summary, browser autosave with restore (Playwright)
 - [x] Synthetic benchmark (`docs/benchmark.md`): 21 rooms, 0 verification mismatches, reproducible; found + fixed an optimizer gap
-- [x] Playwright flows (14 tests incl. building a room from scratch; AI routes mocked)
+- [x] Playwright flows (15 tests incl. building a room from scratch; AI routes mocked)
 
 - [x] Demo script (`docs/demo-script.md`)
 

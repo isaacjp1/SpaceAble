@@ -112,8 +112,24 @@ They only rank layouts that already passed:
 | required route length | 0.05 per cm (after validation) |
 
 Alternatives that move the same pieces to the same orientations within 60 cm of each other
-count as near-duplicates and are dropped. `optimization_profile: max_clearance` is not
-implemented yet; it returns a warning and ranks by minimal changes.
+count as near-duplicates and are dropped.
+
+**Widest route.** Every returned layout reports `cost.widest_route_cm`: the widest route, in
+1 cm steps above the required width, at which `analyze` still passes it. A polygon test (the
+entry's free-space component, rebuilt for each width, touches every required approach zone)
+finds the bound by bisection. `analyze` must then pass at that width, or the value is lowered
+until it does. The route's `min_clearance_cm` can't serve here: the shortest path hugs the
+furniture, so it is always about half the required width. The padding that keeps free space
+conservative also makes this value slightly low (a 100 cm gap reports 99 cm).
+
+**`optimization_profile: max_clearance`** ("most open space") ranks by that width instead of
+cost. The search keeps going until 12 verified, diverse layouts are found (`CLEARANCE_POOL`) or
+the time limit is hit. They are sorted widest first, with ties broken by cost. A layout is
+skipped if a wider or equally wide one already moves the same pieces or a subset of them.
+The pool is collected in cost order, so this is the widest of the cheapest layouts, not
+the widest possible one. If the current layout already passes, the profile still searches,
+keeps only layouts with a wider route than the current one, and returns the current layout
+when it finds none.
 
 ## Security and deployment
 

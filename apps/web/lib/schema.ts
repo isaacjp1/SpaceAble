@@ -164,7 +164,10 @@ export interface Alternative {
   layout: Layout;
   moves: Move[];
   validation: ValidationResult;
-  cost: { moved_objects: number; displacement_cm: number; route_length_cm: number; total_score: number };
+  cost: {
+    moved_objects: number; displacement_cm: number; route_length_cm: number; total_score: number;
+    widest_route_cm: number | null; // widest route width at which the planner still passes this layout
+  };
 }
 
 export type OptimizeStatus =

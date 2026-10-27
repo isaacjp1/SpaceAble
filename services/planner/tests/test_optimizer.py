@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.analyze import analyze
 from app.main import app
 from app.models import OptimizeOptions, apply_layout
-from app.optimize import _near_duplicate, optimize
+from app.optimize import _near_duplicate, optimize, widest_route
 from helpers import dest, load, make, obj
 
 OPTS = OptimizeOptions()
@@ -128,3 +128,50 @@ def test_entry_blocked_by_locked_furniture_is_explained_not_searched():  # found
     r = optimize(s, OPTS)
     assert r.status == "discretized_search_infeasible"
     assert "bed" in r.message and r.search.combinations_considered == 0
+
+
+def _at_width(s, w):
+    return analyze(s.model_copy(update={
+        "requirements": s.requirements.model_copy(update={"route_width_cm": w})}))
+
+
+def test_widest_route_matches_a_fixed_gap():
+    # Built-ins leave a 100 cm gap. Footprints are padded slightly (conservative), so 99 cm.
+    s = load("wide-corridor")
+    assert widest_route(s) == 99.0
+    assert _at_width(s, 99).status == "pass" and _at_width(s, 100).status == "fail"
+
+
+def test_max_clearance_ranks_by_verified_width():
+    s = load("canonical-bedroom")
+    s.requirements.optimization_profile = "max_clearance"
+    r = optimize(s, OPTS)
+    assert r.status == "solutions_found" and r.warnings == []
+    widths = [a.cost.widest_route_cm for a in r.alternatives]
+    assert widths == sorted(widths, reverse=True)
+    fewest = optimize(load("canonical-bedroom"), OPTS).alternatives
+    assert widths[0] >= max(a.cost.widest_route_cm for a in fewest)
+    for i, a in enumerate(r.alternatives):
+        assert _at_width(apply_layout(s, a.layout), a.cost.widest_route_cm).status == "pass"
+        for wider in r.alternatives[:i]:  # never more pieces moved for no extra width
+            assert not {m.object_id for m in wider.moves} <= {m.object_id for m in a.moves}
+
+
+def test_max_clearance_on_a_passing_layout_only_offers_wider_routes():
+    s = load("feasible-bedroom")
+    s.requirements.optimization_profile = "max_clearance"
+    current = widest_route(s)
+    r = optimize(s, OPTS)
+    assert r.status == "solutions_found" and r.alternatives
+    assert all(a.moves and a.cost.widest_route_cm > current for a in r.alternatives)
+    assert f"{current:g} cm" in r.message
+
+
+def test_max_clearance_keeps_the_current_layout_when_nothing_can_move():
+    s = load("feasible-bedroom")
+    s.requirements.optimization_profile = "max_clearance"
+    s.requirements.locked_object_ids = [o.id for o in s.objects]
+    r = optimize(s, OPTS)
+    (alt,) = r.alternatives
+    assert r.status == "solutions_found" and alt.id == "current"
+    assert alt.cost.widest_route_cm == widest_route(s)

@@ -82,3 +82,18 @@ test("optimize returns verified alternatives that can be previewed and applied",
   await expect(page.getByText("Passes the configured geometric checks")).toBeVisible();
   await expect(page.getByText("The layout changed since this analysis")).toHaveCount(0);
 });
+
+test("most open space ranks verified alternatives by widest route", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByText("Planner: online")).toBeVisible();
+
+  await page.getByLabel("When optimizing, prefer").selectOption("max_clearance");
+  await page.getByRole("button", { name: "Optimize" }).click();
+  await expect(page.getByText("Verified alternatives", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Showing the widest/)).toBeVisible();
+  const widths = (await page.getByText(/^Widest route [\d.]+ cm/).allTextContents())
+    .map((t) => Number(t.match(/[\d.]+/)![0]));
+  expect(widths.length).toBeGreaterThan(0);
+  expect(widths).toEqual([...widths].sort((a, b) => b - a));
+  expect(widths[0]).toBeGreaterThan(80); // the sample needs 80 cm
+});

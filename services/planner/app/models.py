@@ -225,6 +225,7 @@ class Cost(Model):
     displacement_cm: float
     route_length_cm: float  # sum over required routes
     total_score: float  # lower is better; weights are engineering defaults (optimize.py)
+    widest_route_cm: float | None = None  # widest route width at which analyze still passes
 
 
 class Alternative(Model):
