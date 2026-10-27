@@ -101,7 +101,7 @@ export function RequestPanel({ scenario, update, metaConfigured }: {
       {error && <p role="alert" className="rounded border border-red-300 bg-red-50 p-2 text-xs text-red-800">{error}</p>}
 
       {review && (
-        <fieldset aria-live="polite" className="flex flex-col gap-2 rounded border border-indigo-200 bg-indigo-50/50 p-2">
+        <fieldset aria-live="polite" className="flex min-w-0 flex-col gap-2 rounded border border-indigo-200 bg-indigo-50/50 p-2">
           <legend className="px-1 text-xs font-semibold text-indigo-800">Proposed by Meta {review.model}: review and edit</legend>
           <p className="text-xs font-medium text-slate-600">Keep in place</p>
           <div className="flex flex-wrap gap-x-3 gap-y-1">

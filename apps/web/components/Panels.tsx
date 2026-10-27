@@ -7,7 +7,7 @@ export type Update = (fn: (s: RoomScenario) => void) => void;
 
 const SIDES: Side[] = ["top", "right", "bottom", "left"];
 const input =
-  "w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-2 focus:outline-indigo-500";
+  "w-full min-w-0 rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-2 focus:outline-indigo-500";
 const button =
   "rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50";
 
@@ -70,7 +70,7 @@ export function RoomPanel({ scenario, update }: { scenario: RoomScenario; update
           onCommit={(v) => v && update((s) => { s.room.height_cm = v; })} />
       </div>
       {door ? (
-        <fieldset className="flex flex-col gap-2 rounded border border-slate-200 p-2">
+        <fieldset className="flex min-w-0 flex-col gap-2 rounded border border-slate-200 p-2">
           <legend className="px-1 text-xs font-medium text-slate-600">Entry door ({door.id})</legend>
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
             Wall
@@ -152,7 +152,7 @@ export function FurniturePanel({ scenario, selected, update, onSelect, onRotate,
       </ul>
 
       {selected ? (
-        <fieldset className="flex flex-col gap-2 rounded border border-indigo-200 bg-indigo-50/40 p-2">
+        <fieldset className="flex min-w-0 flex-col gap-2 rounded border border-indigo-200 bg-indigo-50/40 p-2">
           <legend className="px-1 text-xs font-medium text-indigo-700">Selected: {selected.id}</legend>
           <div className="grid grid-cols-2 gap-2">
             <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">

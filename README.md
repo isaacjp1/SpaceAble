@@ -1,33 +1,36 @@
 # SpaceAble
 
-SpaceAble helps people who use a wheelchair or another mobility device explore
-measured furniture rearrangements for their own room, using clearance needs
-they set themselves. A deterministic geometry engine checks every layout. The
-planned Meta AI features (Muse Spark 1.3, SAM 3.1) turn plain-language requests
-into editable constraints and help identify furniture in a photo. They never
-decide pass/fail.
+**Measured, verified furniture rearrangements for people who use a wheelchair or another mobility
+device.** You enter your room and the clearance you need. Meta's models help you describe the
+problem. A geometry engine, not an AI, decides whether a layout works.
 
 > Planning preview based on confirmed dimensions and simplified 2D geometry. Not an
 > accessibility certification or safety guarantee. Verify in person and seek
 > professional assessment where needed.
 
-## Status
+![The sample bedroom fails: the dresser blocks the approach to the desk](docs/screenshots/1-analyze-fail.png)
 
-Progress is tracked in `TASKS.md`.
+## What it does
 
-| Works now | Not yet |
-| --- | --- |
-| 2D measured room editor (drag, arrow keys, numeric fields, rotate, lock, add/delete) | Deployment |
-| Planner `analyze`: containment, collisions, door width, approach zones, clearance-aware routes, turning circle | Undo/redo, `max_clearance` ranking |
-| Planner `optimize`: up to 3 diverse alternatives, each re-validated; honest no-solution statuses | |
-| Verified route overlay, reachable area, failed-object highlighting, alternative preview with arrows | |
-| Before/after side by side, print summary, Help & limits, inches display, browser autosave with restore | |
-| Save/load JSON (including the chosen alternative and explanation), sample-room reset | |
-| Benchmark: 21 synthetic rooms, every result independently re-verified ([docs/benchmark.md](docs/benchmark.md)) | |
-| Muse Spark 1.3: sentence → reviewed, editable requirements; grounded explanations with a labelled template fallback | |
-| SAM 3.1: photo segmentation overlay, user-confirmed links to plan furniture | |
+1. **Checks your room.** Furniture must fit inside the room without overlapping. The door must be wide enough.
+   An 80 cm (or your own) route must exist from the door to each place you need to reach, plus an optional
+   turning circle. Every result shows measured vs required values and the assumptions behind it.
+2. **Finds rearrangements.** It searches discrete placements cheapest-first, moving at most three pieces.
+   Each option is re-checked by the same validator before you see it. When no option exists, it says why,
+   and never says "impossible" just because it ran out of time.
+3. **Uses Meta's models where they help, and keeps them out of the verdict:**
+   - **Muse Spark 1.3** turns *"I need 36 inches to reach my desk, leave the bed where it is"* into
+     editable constraints you approve (91.44 cm, bed locked). Unknown furniture is rejected, and
+     unstated measurements become questions. It also explains results, but a draft quoting any number
+     the planner didn't produce is replaced by a labelled template.
+   - **SAM 3.1** outlines furniture in a room photo (parsed with Meta's official `@meta-sam/parser`). You
+     link what it finds to your plan. Photo pixels are never turned into measurements.
 
-## Run locally
+| Muse proposes, you approve | Before / after, both verified | SAM outlines, you confirm |
+| --- | --- | --- |
+| ![Muse review panel](docs/screenshots/2-muse-review.png) | ![Side-by-side comparison](docs/screenshots/3-optimize-compare.png) | ![SAM detections on a photo](docs/screenshots/4-sam-photo.png) |
+
+## Run it locally
 
 Requires Python 3.11+ (3.12 tested) and Node 20.17+ (24 tested).
 
@@ -39,57 +42,74 @@ pip install -e '.[dev]'
 uvicorn app.main:app --reload --port 8000
 
 # Terminal 2: web app
-cp .env.example apps/web/.env.local                   # add MODEL_API_KEY for AI features
+cp .env.example apps/web/.env.local                   # add MODEL_API_KEY for the AI features
 cd apps/web
 npm install
-npm run dev                                           # http://localhost:3000
+npm run dev                                           # open http://localhost:3000 (not 127.0.0.1)
 ```
 
-Manual planning works without a Meta key. The header shows whether the planner is
-online and whether a key is configured. It never shows the key itself.
+Without a Meta key, everything except the AI features works. The header shows whether the planner is
+online and whether a key is configured, never the key itself. **Help & limits** in the app walks through
+the workflow. Deployment: [`docs/deploy.md`](docs/deploy.md).
+
+## How it decides
+
+The person and device are modelled as a disc as wide as the route. Valid centre positions are the
+room shrunk by that radius, minus every piece of furniture grown by it (the arcs are buffered so the
+polygon always errs on the safe side). A grid A* search with no diagonal corner-cutting looks for a path
+from just inside the door to the approach zone. Every segment is re-verified against the exact free
+space, and the clearance is measured directly against the furniture rectangles. More detail, including
+what is deliberately simplified, is in [`docs/architecture.md`](docs/architecture.md).
+
+**Evidence:** [`docs/benchmark.md`](docs/benchmark.md) covers 21 synthetic rooms. Every reported layout was
+re-analysed and independently re-checked: 0 mismatches, reproducible across runs. These are synthetic rooms
+and say nothing about real homes.
 
 ## Tests
 
 ```bash
-cd services/planner && pytest -q && ruff check .        # geometry, routing, optimizer, API, benchmark smoke
+cd services/planner && pytest -q && ruff check .        # 60 tests: geometry, routes, optimizer, API, benchmark
 cd services/planner && python -m app.benchmark --repeat --write ../../docs/benchmark.md
-cd apps/web && npm run test && npm run lint && npm run typecheck
-cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # browser flow, uses both services
-cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed  # REAL, billed Meta calls
+cd apps/web && npm run test && npm run lint && npm run typecheck   # 42 tests, Meta mocked at the fetch layer
+cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # 14 browser flows, AI routes mocked
+cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed           # REAL, billed Meta calls
 ```
-
-## How the check works
-
-The person and their device are modelled as a disk as wide as the configured route.
-Valid centre positions are the room shrunk by that radius, minus every piece of
-furniture grown by it. A grid A* search (no diagonal corner-cutting) looks for a
-path from just inside the door to the destination's approach rectangle. Every
-returned segment is re-verified against the exact free-space polygon. The path's
-clearance is then measured directly against the original furniture rectangles. A
-route is only reported when it passes both checks. Details and deliberate
-simplifications are in [`docs/architecture.md`](docs/architecture.md).
 
 ## Layout
 
 ```text
-apps/web/            Next.js 16 UI + API routes (planner proxy; Meta proxy)
-services/planner/    FastAPI + Shapely geometry engine (authoritative pass/fail)
-shared/fixtures/     scenario JSON used by both sides and by the tests
+apps/web/            Next.js 16 UI + API routes (planner proxy, Meta proxy; keys stay server-side)
+services/planner/    FastAPI + Shapely geometry engine and optimizer (the only place pass/fail is decided)
+shared/fixtures/     test rooms used by both sides, the tests and the benchmark
 shared/schemas/      JSON Schema exported from the Pydantic models
-docs/                architecture and assumptions
+docs/                architecture, benchmark, deployment, demo script, screenshots
 ```
+
+## Limitations
+
+- 2D, axis-aligned rectangles only. No heights, door swing, knee/toe clearance or wheelchair kinematics.
+- Results are only as good as the measurements entered. Unconfirmed sizes block a verdict.
+- "No route" means none was found on a 5 cm grid, not that none exists.
+- Not an ADA or building-code check, and no substitute for an occupational therapist.
+- Rate limits live in memory per server instance.
+
+## Privacy and security
+
+Rooms stay in your browser unless you export them. Photos are resized in the browser (which drops EXIF/GPS),
+sent to Meta only when you press Detect, and not stored or logged by SpaceAble. Meta's terms govern
+processing on their side. The Meta key and the planner's shared secret are server-only. The planner rejects
+any caller without the secret.
 
 ## Attribution
 
-- Uses Meta's Model API: Muse Spark 1.3 and SAM 3.1 (https://dev.meta.ai). SAM output
-  is parsed with Meta's [`@meta-sam/parser`](https://www.npmjs.com/package/@meta-sam/parser)
-  (SAM License).
-- Sample photo `apps/web/public/samples/hostel-twin-room.jpg`: "Twin room in a German youth
-  hostel with single beds and wardrobe A" by Profpcde,
+- Built with Meta's Model API: **Muse Spark 1.3** and **SAM 3.1** (https://dev.meta.ai). SAM output is parsed
+  with Meta's [`@meta-sam/parser`](https://www.npmjs.com/package/@meta-sam/parser) (SAM License).
+- Sample photo `apps/web/public/samples/hostel-twin-room.jpg`: "Twin room in a German youth hostel with single
+  beds and wardrobe A" by Profpcde,
   [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Twin_room_in_a_German_youth_hostel_with_single_beds_and_wardrobe_A.jpg),
-  CC0 1.0 (1280 px copy). Used as the consented sample for live SAM.
-- Reference dimensions mentioned in the UI (e.g. a 60 in / 152.4 cm turning circle) come
-  from the U.S. Access Board guides. They are user-editable references, not compliance checks.
+  CC0 1.0 (1280 px copy).
+- Reference dimensions mentioned in the UI (e.g. a 60 in / 152.4 cm turning circle) come from the U.S. Access
+  Board guides. They are editable references, not compliance checks.
 
 ## License
 

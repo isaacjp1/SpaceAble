@@ -115,6 +115,17 @@ Alternatives that move the same pieces to the same orientations within 60 cm of 
 count as near-duplicates and are dropped. `optimization_profile: max_clearance` is not
 implemented yet; it returns a warning and ranks by minimal changes.
 
+## Security and deployment
+
+- The planner is server-to-server only. With `PLANNER_SHARED_SECRET` set (required in production), every
+  route except `/health` needs the `x-planner-secret` header (constant-time comparison), which only the
+  Next.js proxy sends.
+- Next.js routes rate-limit per client IP and bucket: analyze 120/min, optimize 20/min, AI 20/min. Bodies are
+  capped (planner 512 KB, AI JSON 64–128 KB, photos 5 MB) and timeouts are explicit.
+- Every page sends `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy` and
+  `Permissions-Policy`, and no `X-Powered-By`. The planner container runs as a non-root user.
+- See [`deploy.md`](deploy.md) for hosting, variables and the pre-publication checklist.
+
 ## Data contracts
 
 Pydantic models in `services/planner/app/models.py` are authoritative. The

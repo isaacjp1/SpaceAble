@@ -3,6 +3,12 @@
 export const PLANNER_URL = process.env.PLANNER_API_URL ?? "http://127.0.0.1:8000";
 export const MAX_BODY_BYTES = 512 * 1024;
 
+/** The shared secret proves the call comes from this server (set the same value on both). */
+export const plannerHeaders = (): Record<string, string> => ({
+  "content-type": "application/json",
+  ...(process.env.PLANNER_SHARED_SECRET ? { "x-planner-secret": process.env.PLANNER_SHARED_SECRET } : {}),
+});
+
 export function apiError(status: number, code: string, message: string, retryable = false) {
   return Response.json({ error: { code, message, details: {}, retryable } }, { status });
 }
@@ -17,7 +23,7 @@ export async function forward(path: string, req: Request, timeoutMs: number): Pr
   try {
     res = await fetch(`${PLANNER_URL}${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: plannerHeaders(),
       body,
       signal: AbortSignal.timeout(timeoutMs),
     });

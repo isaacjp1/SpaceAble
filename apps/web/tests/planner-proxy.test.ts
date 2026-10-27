@@ -34,3 +34,14 @@ describe("planner proxy", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("planner auth", () => {
+  it("sends the shared secret when configured", async () => {
+    vi.stubEnv("PLANNER_SHARED_SECRET", "s3cret");
+    const fetchSpy = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchSpy);
+    await forward("/x", post("{}"), 1000);
+    expect(fetchSpy.mock.calls[0][1].headers["x-planner-secret"]).toBe("s3cret");
+    vi.unstubAllEnvs();
+  });
+});

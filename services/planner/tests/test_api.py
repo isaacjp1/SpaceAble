@@ -60,3 +60,16 @@ def test_grid_option_bounds():
     r = client.post("/v1/planner/analyze",
                     json={"scenario": SCENARIO, "options": {"grid_cm": 0.1}})
     assert r.status_code == 422
+
+
+def test_shared_secret_guards_everything_but_health(monkeypatch):
+    monkeypatch.setenv("PLANNER_SHARED_SECRET", "s3cret")
+    assert client.get("/health").status_code == 200
+    r = client.post("/v1/planner/analyze", json={"scenario": SCENARIO})
+    assert r.status_code == 401 and r.json()["error"]["code"] == "UNAUTHORIZED"
+    r = client.post("/v1/planner/analyze", json={"scenario": SCENARIO},
+                    headers={"x-planner-secret": "wrong"})
+    assert r.status_code == 401
+    r = client.post("/v1/planner/analyze", json={"scenario": SCENARIO},
+                    headers={"x-planner-secret": "s3cret"})
+    assert r.status_code == 200

@@ -1,5 +1,6 @@
 """SpaceAble planner HTTP API."""
 
+import hmac
 import logging
 import os
 
@@ -36,7 +37,13 @@ def error(status: int, code: str, message: str, details=None, retryable=False) -
 
 
 @app.middleware("http")
-async def limit_body(request: Request, call_next):
+async def guard(request: Request, call_next):
+    # Only the Next.js server calls the planner. When PLANNER_SHARED_SECRET is set (required in
+    # production), every route except /health needs it, so the compute endpoints aren't public.
+    secret = os.environ.get("PLANNER_SHARED_SECRET")
+    sent = request.headers.get("x-planner-secret", "").encode()
+    if secret and request.url.path != "/health" and not hmac.compare_digest(sent, secret.encode()):
+        return error(401, "UNAUTHORIZED", "Missing or wrong planner secret.")
     # Limit: trusts Content-Length; the Next.js proxy also caps bodies. Stream-count if exposed.
     size = request.headers.get("content-length")
     if size and size.isdigit() and int(size) > MAX_BODY_BYTES:
