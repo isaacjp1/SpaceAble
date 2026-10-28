@@ -51,7 +51,7 @@ const surface = z.object({
   dimensions: z.array(z.number()).length(3),
 });
 const ScanSchema = z.object({
-  walls: z.array(surface.extend({ curve: z.unknown() })),
+  walls: z.array(surface.extend({ curve: z.unknown().optional() })), // absent or null when straight
   doors: z.array(surface),
   openings: z.array(surface),
   objects: z.array(surface.extend({
