@@ -26,13 +26,18 @@ _MOVES = [(0, 1, 1.0), (0, -1, 1.0), (1, 0, 1.0), (-1, 0, 1.0),
           (1, 1, _D), (1, -1, _D), (-1, 1, _D), (-1, -1, _D)]
 
 
+def grow(geom, r: float):
+    """Footprints grown by r, circumscribing the true rounded shape (see above)."""
+    return geom.buffer(r * INFLATE, quad_segs=QUAD_SEGS)
+
+
 def free_space(room: Room, footprints: list[Polygon], r: float):
     W, H = room.width_cm, room.height_cm
     if W <= 2 * r or H <= 2 * r:
         return Polygon()
     free = box(r, r, W - r, H - r)
     if footprints:
-        free = free.difference(unary_union(footprints).buffer(r * INFLATE, quad_segs=QUAD_SEGS))
+        free = free.difference(grow(unary_union(footprints), r))
     return free
 
 

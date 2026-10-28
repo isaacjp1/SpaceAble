@@ -3,9 +3,10 @@
 from fastapi.testclient import TestClient
 
 from app.analyze import analyze
+from app.benchmark import procedural
 from app.main import app
 from app.models import OptimizeOptions, RoomScenario, apply_layout
-from app.optimize import _near_duplicate, optimize, widest_route
+from app.optimize import POOL, _near_duplicate, optimize, widest_route
 from helpers import check, dest, load, make, obj, route_check
 
 OPTS = OptimizeOptions()
@@ -173,6 +174,16 @@ def test_the_current_layout_is_both_when_nothing_can_move():
     assert r.status == "solutions_found" and alt.id == "current"
     assert alt.best_for == ["fewest_changes", "widest_route"]
     assert alt.validation.widest_route_cm == widest_route(s)
+
+
+def test_the_search_stops_once_it_cannot_get_wider():
+    # No spot for one of the movers allows a wider route than this room already has: proven at once.
+    r = optimize(procedural(13), OPTS)
+    assert [a.id for a in r.alternatives] == ["current"] and r.search.combinations_considered == 0
+    # Here only the full check can tell, so the search gives up after POOL misses in a row.
+    r = optimize(procedural(5), OPTS)
+    assert [a.id for a in r.alternatives] == ["current"] and r.search.candidates_tested == POOL
+    assert r.warnings == []
 
 
 def _with_new(name, size, approach_side=None, at=(0, 0)):

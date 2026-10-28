@@ -27,6 +27,7 @@ const Body = z.strictObject({
 });
 const TOOLS: string[] = ["check_layout", "find_layouts", "change_room", "ada_reference_check"] satisfies ToolName[];
 const DEADLINE_MS = 100_000; // after this Muse answers with whatever has run
+const SKIPPED = "Not run: an earlier change_room could not be checked, so the room was not changed.";
 const OPTIMIZE_LIMIT_S = 5;
 
 // Muse Spark plans planner checks over up to MAX_ROUNDS rounds; the planner decides; the answer may
@@ -80,7 +81,8 @@ async function runTool(p: Planned, send: (e: AssistantEvent) => void, signal: Ab
     return { content: JSON.stringify(run.summary), run };
   } catch (e) {
     if (signal.aborted) throw e;
-    const message = e instanceof Error ? e.message : "The planner failed.";
+    const message = (e instanceof Error ? e.message : "The planner failed.") +
+      (p.tool === "change_room" ? " The room was not changed." : "");
     send({ type: "run_error", id: p.call.id, message });
     return { content: JSON.stringify({ error: message }), run: null };
   }
@@ -93,7 +95,7 @@ async function converse(client: OpenAI, s: RoomScenario, question: string, histo
   send: (e: AssistantEvent) => void, signal: AbortSignal) {
   const said = statedNumbers([question, ...history.map((t) => t.question)]);
   const messages: ChatCompletionMessageParam[] = assistantMessages(s, question, history);
-  let room = s; // the room as change_room calls leave it; every call starts from it
+  let room = s; // the room as checked change_room calls leave it; every call starts from it
   const runs: AssistantRun[] = [];
   const deadline = Date.now() + DEADLINE_MS;
   let text = "";
@@ -117,16 +119,17 @@ async function converse(client: OpenAI, s: RoomScenario, question: string, histo
     messages.push(choice.message);
 
     const space = Math.min(MAX_CALLS_PER_ROUND, MAX_RUNS - runs.length);
+    let draft = room; // calls build on the changes planned before them in this round
     const planned: Planned[] = calls.map((call, i) => {
       const tool = call.function.name as ToolName;
       if (i >= space) return { call, tool, error: "Too many checks at once; ask for fewer next round." };
       if (!TOOLS.includes(tool)) return { call, tool, error: `There is no tool called ${call.function.name}.` };
-      if (tool === "ada_reference_check") return { call, tool, scenario: adaScenario(room), changes: ADA_CHANGES };
+      if (tool === "ada_reference_check") return { call, tool, scenario: adaScenario(draft), changes: ADA_CHANGES };
       let args: unknown;
       try { args = JSON.parse(call.function.arguments); } catch { return { call, tool, error: "The arguments were not JSON." }; }
-      const applied = applyChanges(room, tool, args, said);
+      const applied = applyChanges(draft, tool, args, said);
       if (!applied.ok) return { call, tool, error: applied.error };
-      if (tool === "change_room") room = applied.scenario; // later calls, this round too, build on it
+      if (tool === "change_room") draft = applied.scenario;
       return { call, tool, scenario: applied.scenario, changes: applied.changes };
     });
     send({ type: "tools", round, calls: planned.map((p) => ({ id: p.call.id, tool: p.tool,
@@ -135,8 +138,23 @@ async function converse(client: OpenAI, s: RoomScenario, question: string, histo
     // Limit: one planner call at a time. The planner is one Python process, and concurrent
     // searches thrash on its GIL (live: 3 at once each hit the 5 s limit; one alone took 0.7 s).
     // Run them in parallel once the planner has several worker processes.
+    // A change counts only once the planner has checked it. If it couldn't, the room stays as it
+    // was and the calls planned on top of the change are not run.
     const done: Ran[] = [];
-    for (const p of planned) done.push(await runTool(p, send, signal));
+    let broken = false;
+    for (const p of planned) {
+      if (broken && !("error" in p)) {
+        send({ type: "run_error", id: p.call.id, message: SKIPPED });
+        done.push({ content: JSON.stringify({ error: SKIPPED }), run: null });
+        continue;
+      }
+      const ran = await runTool(p, send, signal);
+      if (p.tool === "change_room" && !("error" in p)) {
+        if (ran.run) room = ran.run.scenario;
+        else broken = true;
+      }
+      done.push(ran);
+    }
     runs.push(...done.flatMap((d) => (d.run ? [d.run] : [])));
     messages.push(...planned.map((p, i) => ({ role: "tool" as const, tool_call_id: p.call.id, content: done[i].content })));
   }

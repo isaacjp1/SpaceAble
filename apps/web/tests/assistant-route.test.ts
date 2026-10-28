@@ -34,8 +34,10 @@ const completion = ({ tools, text }: Reply) => Response.json({
     tool_calls: tools?.map((t, i) => ({ id: `call_${i}`, type: "function", function: { name: t.name, arguments: JSON.stringify(t.args) } })) } }],
 });
 
-/** Muse replies in order; the planner answers analyze/optimize. Records every request body. */
-function mock(replies: Reply[], planner: { analyze?: ValidationResult; optimize?: OptimizationResult } = {}) {
+/** Muse replies in order; the planner answers analyze/optimize (the first `failFirst` calls fail).
+ * Records every request body. */
+function mock(replies: Reply[],
+  planner: { analyze?: ValidationResult; optimize?: OptimizationResult; failFirst?: number } = {}) {
   const muse: Record<string, unknown>[] = [];
   const plannerCalls: { path: string; body: { scenario: { objects: { id: string; to_place: boolean }[] } } }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -46,6 +48,9 @@ function mock(replies: Reply[], planner: { analyze?: ValidationResult; optimize?
       return completion(replies[muse.length - 1] ?? { text: "Done." });
     }
     plannerCalls.push({ path: new URL(href).pathname, body });
+    if (plannerCalls.length <= (planner.failFirst ?? 0)) {
+      return Response.json({ error: { message: "The planner hit an unexpected error." } }, { status: 500 });
+    }
     return Response.json(href.endsWith("/optimize") ? planner.optimize : planner.analyze);
   }));
   return { muse, plannerCalls };
@@ -103,6 +108,25 @@ describe("POST /api/ai/assistant", () => {
     expect(plannerCalls[1].body.scenario.objects.map((o) => o.id)).toEqual(["bed", "desk", "dresser", "new-chair"]);
     expect(JSON.stringify(muse[1].tools)).toContain('"new-chair"');
     expect(answer.source).toBe("muse");
+  });
+
+  it("doesn't change the room, or build on the change, when the planner can't check it", async () => {
+    const move = { ...keep, move: [{ object_id: "dresser", x_cm: 90, y_cm: 300, rotation_deg: 0 }] };
+    const { muse, plannerCalls } = mock([
+      { tools: [{ name: "change_room", args: move }, { name: "check_layout", args: keep }] },
+      { tools: [{ name: "check_layout", args: keep }] },
+      { text: "The planner couldn't check that move, so your room was not changed." },
+    ], { analyze: validation("pass", 99), failFirst: 1 });
+    const { events } = await ask("Move the dresser to the bottom wall.");
+    expect(events.some((e) => e.type === "run" && e.run.tool === "change_room")).toBe(false); // nothing to apply
+    const errors = events.flatMap((e) => (e.type === "run_error" ? [e.message] : []));
+    expect(errors).toEqual([expect.stringContaining("The room was not changed."), expect.stringContaining("Not run")]);
+    expect(JSON.stringify(muse[1].messages)).toContain("The room was not changed.");
+    // the skipped check never reached the planner, and the next round started from the real room
+    expect(plannerCalls).toHaveLength(2);
+    const dresser = (plannerCalls[1].body.scenario.objects as unknown as { id: string; y_cm: number }[])
+      .find((o) => o.id === "dresser");
+    expect(dresser?.y_cm).toBe(165);
   });
 
   it("sends an invented width back to Muse instead of running it", async () => {
