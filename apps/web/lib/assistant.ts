@@ -108,11 +108,18 @@ const Changes = z.strictObject({
 
 // ---- the person's own numbers ------------------------------------------------------------
 
-const TO_CM = [1, 2.54, 30.48, 100, 0.1]; // as written, or from inches, feet, metres, millimetres
-/** Every number the person wrote, with its centimetre equivalents. */
+const UNITS: [RegExp, number][] = [ // a unit right after the number converts it to cm
+  [/^(mm|millimet(re|er)s?)\b/, 0.1], [/^(m|met(re|er)s?)\b/, 100],
+  [/^(in\b|inch(es)?\b|")/, 2.54], [/^(ft\b|feet\b|foot\b|')/, 30.48],
+];
+/** Every number the person wrote, plus its centimetre value when a unit follows it. A bare number
+ * counts only as itself, so "option 2" never makes 200 cm a stated width. */
 export function statedNumbers(texts: string[]): number[] {
-  return texts.flatMap((t) => (t.match(/\d+(?:\.\d+)?/g) ?? []).map(Number))
-    .flatMap((n) => TO_CM.map((f) => Math.round(n * f * 100) / 100));
+  return texts.flatMap((t) => [...t.matchAll(/(\d+(?:\.\d+)?)\s*([a-z"']*)/gi)].flatMap(([, num, unit]) => {
+    const n = Number(num);
+    const f = UNITS.find(([re]) => re.test(unit.toLowerCase()))?.[1];
+    return f ? [n, Math.round(n * f * 100) / 100] : [n];
+  }));
 }
 const isStated = (v: number, said: number[]) => said.some((k) => Math.abs(k - v) <= 0.5);
 

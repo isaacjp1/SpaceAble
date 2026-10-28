@@ -62,6 +62,28 @@ export async function POST(req: Request) {
   }), { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" } });
 }
 
+type Ran = { content: string; run: AssistantRun | null }; // content: what Muse is told
+
+/** One planner run for a planned call; failures go back to Muse as data, not as an error. */
+async function runTool(p: Planned, send: (e: AssistantEvent) => void, signal: AbortSignal): Promise<Ran> {
+  if ("error" in p) return { content: JSON.stringify({ error: p.error }), run: null };
+  try {
+    const result = p.tool === "check_layout"
+      ? await plannerJson<ValidationResult>("/v1/planner/analyze", { scenario: p.scenario }, 30_000, signal)
+      : await plannerJson<OptimizationResult>("/v1/planner/optimize",
+        { scenario: p.scenario, options: { time_limit_s: OPTIMIZE_LIMIT_S } }, 40_000, signal);
+    const run: AssistantRun = { id: p.call.id, tool: p.tool, changes: p.changes, scenario: p.scenario, result,
+      summary: summarizeRun(p.tool, p.changes, p.scenario, result) };
+    send({ type: "run", run });
+    return { content: JSON.stringify(run.summary), run };
+  } catch (e) {
+    if (signal.aborted) throw e;
+    const message = e instanceof Error ? e.message : "The planner failed.";
+    send({ type: "run_error", id: p.call.id, message });
+    return { content: JSON.stringify({ error: message }), run: null };
+  }
+}
+
 type Planned = { call: ChatCompletionMessageFunctionToolCall; tool: ToolName } &
   ({ scenario: RoomScenario; changes: string[] } | { error: string });
 
@@ -105,24 +127,11 @@ async function converse(client: OpenAI, s: RoomScenario, question: string, histo
     send({ type: "tools", round, calls: planned.map((p) => ({ id: p.call.id, tool: p.tool,
       changes: "changes" in p ? p.changes : null, error: "error" in p ? p.error : null })) });
 
-    const done = await Promise.all(planned.map(async (p): Promise<{ content: string; run: AssistantRun | null }> => {
-      if ("error" in p) return { content: JSON.stringify({ error: p.error }), run: null };
-      try {
-        const result = p.tool === "check_layout"
-          ? await plannerJson<ValidationResult>("/v1/planner/analyze", { scenario: p.scenario }, 30_000, signal)
-          : await plannerJson<OptimizationResult>("/v1/planner/optimize",
-            { scenario: p.scenario, options: { time_limit_s: OPTIMIZE_LIMIT_S } }, 40_000, signal);
-        const run: AssistantRun = { id: p.call.id, tool: p.tool, changes: p.changes, scenario: p.scenario, result,
-          summary: summarizeRun(p.tool, p.changes, p.scenario, result) };
-        send({ type: "run", run });
-        return { content: JSON.stringify(run.summary), run };
-      } catch (e) {
-        if (signal.aborted) throw e;
-        const message = e instanceof Error ? e.message : "The planner failed.";
-        send({ type: "run_error", id: p.call.id, message });
-        return { content: JSON.stringify({ error: message }), run: null };
-      }
-    }));
+    // Limit: one planner call at a time. The planner is one Python process, and concurrent
+    // searches thrash on its GIL (live: 3 at once each hit the 5 s limit; one alone took 0.7 s).
+    // Run them in parallel once the planner has several worker processes.
+    const done: Ran[] = [];
+    for (const p of planned) done.push(await runTool(p, send, signal));
     runs.push(...done.flatMap((d) => (d.run ? [d.run] : [])));
     messages.push(...planned.map((p, i) => ({ role: "tool" as const, tool_call_id: p.call.id, content: done[i].content })));
   }

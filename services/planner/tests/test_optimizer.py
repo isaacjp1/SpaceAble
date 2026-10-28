@@ -224,3 +224,11 @@ def test_a_passing_room_still_searches_for_a_place_for_a_new_piece():
 def test_a_new_piece_too_big_for_the_room_is_reported():
     r = optimize(_with_new("canonical-bedroom", (500, 500)), OPTS)
     assert r.status == "discretized_search_infeasible" and "No spot for the new Shelf" in r.message
+
+
+def test_an_unplaced_piece_does_not_narrow_the_widest_route():
+    s = _with_new("feasible-bedroom", (100, 40), approach_side="bottom")  # nominally at (0, 0)
+    body = TestClient(app).post("/v1/planner/analyze",
+                                json={"scenario": s.model_dump(mode="json")}).json()
+    assert body["status"] == "pass"
+    assert body["widest_route_cm"] == widest_route(load("feasible-bedroom")) > 80

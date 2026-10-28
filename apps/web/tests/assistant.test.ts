@@ -15,8 +15,16 @@ const said = (...texts: string[]) => statedNumbers(texts);
 describe("the person's numbers", () => {
   it("include centimetre equivalents of inches, feet and metres", () => {
     expect(said("I need 36 inches")).toContain(91.44);
+    expect(said(`36" wide`)).toContain(91.44);
     expect(said("about 1 metre")).toContain(100);
     expect(said("3 ft")).toContain(91.44);
+    expect(said("2m")).toContain(200);
+  });
+
+  it("convert only when a unit follows the number", () => {
+    expect(said("what about option 2?")).toEqual([2]);
+    expect(said("give it 2 minutes")).toEqual([2]);
+    expect(said("a 100 by 40 cm shelf")).toEqual([100, 40]);
   });
 });
 

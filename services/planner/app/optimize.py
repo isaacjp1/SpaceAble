@@ -32,6 +32,7 @@ from .models import (
     SearchInfo,
     ValidationResult,
     apply_layout,
+    without_unplaced,
 )
 
 # Initial engineering defaults, not accessibility science.
@@ -159,6 +160,7 @@ def widest_route(scenario: RoomScenario, grid_cm: float = 5.0) -> float | None:
     touches every required approach zone) bounds the width; `analyze` must pass at the
     reported width, otherwise it is lowered until it does.
     """
+    scenario = without_unplaced(scenario)  # as analyze does: an unplaced piece is not in the room
     req, room, door = scenario.requirements, scenario.room, scenario.start_door()
     if not req.route_width_cm or door is None or door.clear_width_cm is None:
         return None
