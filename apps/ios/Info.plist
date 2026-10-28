@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>SpaceAble</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SpaceAble uses the camera and LiDAR scanner to measure your room.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SpaceAble uses the microphone when you describe what you need by voice.</string>
+</dict>
+</plist>

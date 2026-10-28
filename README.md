@@ -95,6 +95,7 @@ cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed speech.wav 
 
 ```text
 apps/web/            Next.js 16 UI + API routes (planner proxy, Meta proxy; keys stay server-side)
+apps/ios/            iPhone app (SwiftPM, built with xtool): the site in a web view plus native LiDAR room scanning
 services/planner/    FastAPI + Shapely geometry engine and optimizer (the only place pass/fail is decided)
 shared/fixtures/     test rooms used by both sides, the tests and the benchmark
 shared/schemas/      JSON Schema exported from the Pydantic models
