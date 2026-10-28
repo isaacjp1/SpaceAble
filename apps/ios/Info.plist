@@ -6,7 +6,11 @@
 	<string>SpaceAble</string>
 	<key>NSCameraUsageDescription</key>
 	<string>SpaceAble uses the camera and LiDAR scanner to measure your room.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>SpaceAble uses the microphone when you describe what you need by voice.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- plain http to a dev server on the local network, set with SpaceAbleServer -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

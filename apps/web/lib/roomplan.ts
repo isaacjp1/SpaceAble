@@ -1,6 +1,6 @@
 // Turns an Apple RoomPlan scan (CapturedRoom from the iPhone app) into a draft RoomScenario.
 // A scan is a proposal: everything comes in unconfirmed, so the planner asks for input until the
-// person has checked each item. Runs in the browser; the raw scan is never sent to the server.
+// person has checked each item. Runs in the browser (Load JSON) and in /api/app/draft (the iPhone app).
 import { z } from "zod";
 import { clampToRoom, dims } from "./geometry-ui";
 import { type Door, type Furniture, type Requirements, type RoomScenario, RoomScenarioSchema } from "./schema";
@@ -18,7 +18,7 @@ const CATEGORIES = {
   table: ["table", "Table", true],
   chair: ["chair", "Chair", true],
   sofa: ["sofa", "Sofa", true],
-  storage: ["other", "Storage", true],
+  storage: ["wardrobe", "Storage", true],
   television: ["other", "Television", true],
   bathtub: ["obstacle", "Bathtub", false],
   toilet: ["obstacle", "Toilet", false],

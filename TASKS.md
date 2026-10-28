@@ -73,6 +73,10 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Room scan → draft plan: RoomPlan converter (rectangles only, conservative rounding, everything unconfirmed), Scan room bridge and review banner, Load JSON accepts raw scans (vitest + Playwright with a stubbed app bridge)
 - [x] iPhone app (`apps/ios`, xtool): site in a web view, RoomPlan scanner, origin-checked bridge; compiles with `xtool dev build` (debug and release)
 - [ ] Run the app on a LiDAR iPhone: scan a real room and confirm the scan's JSON encoding
+- [x] Simple native iPhone app: SwiftUI flow (how you get around → scan → Looks right → plan), no web view; compiles with `xtool dev build` (debug and release)
+- [x] `/api/app/draft` and `/api/app/plan`: mobility profiles, default places to reach, one-tap confirmation, narrow-door replan, plain-language steps, Muse reads free text (vitest; plan route run against the real planner for all 5 profiles)
+- [ ] Run the simple app end to end on a phone against a deployed server
+- [ ] Live-verify the Muse description reader with a real key
 
 - [x] Demo script (`docs/demo-script.md`)
 
