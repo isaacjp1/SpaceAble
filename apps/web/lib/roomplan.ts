@@ -98,7 +98,8 @@ export function capturedRoomToScenario(raw: unknown, keep: Requirements): { scen
   const turn = ([x, y]: Vec): Vec => [x * Math.cos(t) - y * Math.sin(t), x * Math.sin(t) + y * Math.cos(t)];
   const square = <T extends Item>(i: T): T => ({ ...i, centre: turn(i.centre), axis: turn(i.axis) });
 
-  // Rectangular rooms only: a box around an L-shape would let a route through space outside the walls.
+  // Rectangular rooms only: a box drawn around an L-shape includes floor beyond the walls.
+  // Every wall must lie on a side of the box (within 10 cm) and be square to it (within 5°).
   const walls = scan.walls.map(square);
   if (walls.some((w) => w.curved)) throw new Error("SpaceAble can only plan rectangular rooms for now, and this scan has a curved wall.");
   const offSquare = (a: Vec) => { const d = Math.abs(angle(a)) % 90; return Math.min(d, 90 - d); };
@@ -117,8 +118,8 @@ export function capturedRoomToScenario(raw: unknown, keep: Requirements): { scen
     throw new Error("The scanned room is more than 30 m across, which is larger than SpaceAble can plan.");
   const plan = ([x, y]: Vec): Vec => [(x - x0) * 100, (y - y0) * 100]; // cm from the top-left corner
 
-  // Doors and doorless openings go on the nearest wall. The scanned width is the frame, wider than
-  // the clear opening, so it errs on the unsafe side: doors stay unconfirmed until measured.
+  // Doors and doorless openings go on the nearest wall. RoomPlan measures the frame, so the width is
+  // optimistic compared with the clear opening; doors stay unconfirmed until measured.
   const doors: Door[] = [];
   for (const d of [...scan.doors, ...scan.openings].map(square)) {
     const [x, y] = plan(d.centre);

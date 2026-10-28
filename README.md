@@ -68,6 +68,30 @@ Without a Meta key, everything except the AI features works. The header shows wh
 online and whether a key is configured, never the key itself. **Help & limits** in the app walks through
 the workflow. Deployment: [`docs/deploy.md`](docs/deploy.md).
 
+## iPhone app and room scanning
+
+`apps/ios` is a small iPhone app: the website in a web view, plus **Scan room**, which measures the room
+with Apple's RoomPlan (an iPhone or iPad with a LiDAR scanner, iOS 17+). The scan opens in the planner as a
+draft. It is converted inside the page on the phone and never uploaded. Only rectangular rooms are supported.
+
+A scan is a draft, not a measurement to rely on. Every piece and door comes in unconfirmed, so **Analyze**
+asks for input until you have checked each one. Check the room size too, and measure doors with a tape
+measure: the scan measures the door frame, which is wider than the clear opening.
+
+The app builds on Linux or WSL with [xtool](https://github.com/xtool-org/xtool), no Mac needed:
+
+```bash
+xtool setup        # once: sign in with an Apple ID and point it at a downloaded Xcode .xip
+cd apps/ios
+xtool dev build    # compile only
+xtool dev          # build, install and run on a connected iPhone
+```
+
+The first install needs Developer Mode on the phone and the developer certificate trusted under
+Settings > General > VPN & Device Management. With a free Apple ID, the install expires after 7 days.
+The app loads the site from `siteURL` in `apps/ios/Sources/SpaceAble/SiteView.swift`. **Load JSON** also
+opens a raw scan file in any browser.
+
 ## How it decides
 
 The person and device are modelled as a disc as wide as the route. Valid centre positions are the
@@ -86,8 +110,8 @@ and say nothing about real homes.
 ```bash
 cd services/planner && pytest -q && ruff check .        # 72 tests: geometry, routes, optimizer, API, benchmark
 cd services/planner && python -m app.benchmark --repeat --write ../../docs/benchmark.md
-cd apps/web && npm run test && npm run lint && npm run typecheck   # 77 tests, Meta and the planner mocked at the fetch layer
-cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # 20 browser flows, AI routes mocked
+cd apps/web && npm run test && npm run lint && npm run typecheck   # 88 tests, Meta and the planner mocked at the fetch layer
+cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # 22 browser flows, AI routes mocked
 cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed speech.wav   # REAL, billed Meta calls
 ```
 
@@ -106,6 +130,7 @@ docs/                architecture, benchmark, deployment, demo script, screensho
 
 - 2D, axis-aligned rectangles only. No heights, door swing, knee/toe clearance or wheelchair kinematics.
 - Results are only as good as the measurements entered. Unconfirmed sizes block a verdict.
+- Room scans: rectangular rooms only, and scanned door widths are the frame, not the clear opening.
 - "No route" means none was found on a 5 cm grid, not that none exists.
 - Not an ADA or building-code compliance check. The ADA reference check covers 5 dimensional rules only, and the
   ADA applies to public places such as hotels, not most private homes. No substitute for an occupational therapist.
@@ -116,7 +141,8 @@ docs/                architecture, benchmark, deployment, demo script, screensho
 Rooms stay in your browser unless you export them. Photos are resized in the browser (which drops EXIF/GPS),
 sent to Meta only when you press Detect, and not stored or logged by SpaceAble. Voice recordings are
 converted to WAV in the browser, sent to Meta only when you stop recording, and not stored or logged
-either; your furniture names go with them as recognition hints. Meta's terms govern
+either; your furniture names go with them as recognition hints. Room scans from the iPhone app are
+converted inside the page on the phone; the raw scan is never uploaded. Meta's terms govern
 processing on their side. The Meta key and the planner's shared secret are server-only. The planner rejects
 any caller without the secret.
 
