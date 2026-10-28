@@ -55,7 +55,7 @@ export function rateLimited(req: Request, bucket = "ai", max = 20, windowMs = 60
   if (recent.length <= max) return null;
   return bucket === "ai"
     ? apiError(429, "META_RATE_LIMITED", "Too many AI requests from this browser. Wait a minute.", true)
-    : apiError(429, "RATE_LIMITED", "Too many planner requests from this browser. Wait a minute.", true);
+    : apiError(429, "RATE_LIMITED", "Too many requests from this browser. Wait a minute.", true);
 }
 
 /** Parse a JSON body with a size cap; returns the error response on failure. */

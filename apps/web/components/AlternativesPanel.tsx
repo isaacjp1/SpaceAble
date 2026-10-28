@@ -1,28 +1,11 @@
 "use client";
 
-import { dims } from "@/lib/geometry-ui";
-import type { Alternative, Furniture, Move, OptimizationResult, RoomScenario } from "@/lib/schema";
+import { describeMove } from "@/lib/geometry-ui";
+import type { Alternative, OptimizationResult, RoomScenario } from "@/lib/schema";
 import { StatusBadge } from "./ValidationPanel";
 
 const button =
   "rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-500";
-
-function describe(m: Move, o: Furniture) {
-  // direction of the footprint centre, consistent with distance_cm
-  const centre = (x: number, y: number, rot: number) => {
-    const { w, h } = dims({ ...o, rotation_deg: rot as Furniture["rotation_deg"] });
-    return [x + w / 2, y + h / 2];
-  };
-  const [fx, fy] = centre(m.from_x_cm, m.from_y_cm, m.from_rotation_deg);
-  const [tx, ty] = centre(m.to_x_cm, m.to_y_cm, m.to_rotation_deg);
-  const dx = tx - fx;
-  const dy = ty - fy;
-  const dir = [dy < -2 ? "up" : dy > 2 ? "down" : "", dx < -2 ? "left" : dx > 2 ? "right" : ""]
-    .filter(Boolean).join("-");
-  const turned = m.to_rotation_deg !== m.from_rotation_deg
-    ? `, turned to ${m.to_rotation_deg}°` : "";
-  return `${o.label}: moved ${m.distance_cm} cm${dir ? ` ${dir}` : ""}${turned}`;
-}
 
 const HEADLINE: Record<OptimizationResult["status"], string> = {
   solutions_found: "Verified alternatives",
@@ -75,7 +58,7 @@ export function AlternativesPanel({ result, stale, scenario, previewId, onPrevie
               </div>
               <ul className="mt-1 text-xs text-slate-600">
                 {alt.moves.length
-                  ? alt.moves.map((m) => <li key={m.object_id}>{describe(m, object(m.object_id))}</li>)
+                  ? alt.moves.map((m) => <li key={m.object_id}>{describeMove(m, object(m.object_id))}</li>)
                   : <li>Nothing needs to move.</li>}
                 {alt.validation.widest_route_cm !== null && (
                   <li className="tabular-nums text-slate-700">

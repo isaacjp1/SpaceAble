@@ -13,6 +13,24 @@ export function apiError(status: number, code: string, message: string, retryabl
   return Response.json({ error: { code, message, details: {}, retryable } }, { status });
 }
 
+/** A planner call made by this server (the assistant's tools). Throws with a readable message. */
+export async function plannerJson<T>(path: string, body: unknown, timeoutMs: number, signal: AbortSignal): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${PLANNER_URL}${path}`, {
+      method: "POST", headers: plannerHeaders(), body: JSON.stringify(body),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+    });
+  } catch (e) {
+    if (signal.aborted) throw e;
+    throw new Error(e instanceof DOMException && e.name === "TimeoutError"
+      ? `The planner did not answer within ${timeoutMs / 1000} s.` : "The planner service is not reachable.");
+  }
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error?.message ?? `The planner returned an error (${res.status}).`);
+  return data as T;
+}
+
 export async function forward(path: string, req: Request, timeoutMs: number): Promise<Response> {
   const declared = Number(req.headers.get("content-length") ?? 0);
   const body = declared > MAX_BODY_BYTES ? "" : await req.text();

@@ -34,6 +34,7 @@ export const FurnitureSchema = z.strictObject({
   movable: z.boolean().default(true),
   confirmed: z.boolean().default(false),
   label_source: z.enum(["user-provided", "ai-inferred"]).default("user-provided"),
+  to_place: z.boolean().default(false), // hypothetical new piece with no position yet
 });
 
 export const DestinationSchema = z.strictObject({
@@ -81,6 +82,9 @@ export const RoomScenarioSchema = z
       if (!objects.has(d.object_id)) fail(`Unknown destination '${d.id}' object id '${d.object_id}'`);
     for (const i of s.requirements.locked_object_ids)
       if (!objects.has(i)) fail(`Unknown locked object id '${i}'`);
+    for (const o of s.objects)
+      if (o.to_place && (!o.movable || s.requirements.locked_object_ids.includes(o.id)))
+        fail(`'${o.id}' has no position yet, so it can't be fixed or locked`);
     for (const i of s.requirements.required_destination_ids)
       if (!dests.has(i)) fail(`Unknown required destination id '${i}'`);
     const start = s.requirements.start_door_id;
@@ -158,6 +162,7 @@ export interface Move {
   to_y_cm: number;
   to_rotation_deg: number;
   distance_cm: number;
+  placed?: boolean; // a new piece put here (from_* equal to_*); older results omit it
 }
 
 export interface Alternative {

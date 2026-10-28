@@ -8,7 +8,7 @@ import type { Alternative, OptimizationResult, RoomScenario, Status, ValidationR
 export const PROFILES = ["minimal_changes", "max_clearance"] as const;
 
 // An empty enum is invalid JSON Schema, so an empty list allows no items at all.
-const idList = (ids: string[]) =>
+export const idList = (ids: string[]) =>
   ids.length ? { type: "array", items: { type: "string", enum: ids } } : { type: "array", maxItems: 0 };
 
 export function constraintSchema(s: RoomScenario) {
@@ -255,8 +255,9 @@ const CLAIM = /\bADA\b|complian|certif|guarantee|wheelchair[- ]accessible|fully 
 const NEGATION = /\b(not|no|never|cannot|without)\b|n't\b/i;
 
 /** Reject explanations with numbers absent from the evidence or unsupported positive claims. */
-export function checkExplanation(text: string, e: Evidence): { ok: true } | { ok: false; reason: string } {
-  const known = (JSON.stringify(e).match(NUMBER) ?? []).map(Number);
+export function checkExplanation(text: string, e: unknown, alsoKnown: number[] = []):
+  { ok: true } | { ok: false; reason: string } {
+  const known = [...(JSON.stringify(e).match(NUMBER) ?? []).map(Number), ...alsoKnown];
   for (const n of (text.match(NUMBER) ?? []).map(Number)) {
     if (Number.isInteger(n) && n <= 3) continue; // counts such as "2 pieces" or "option 1"
     if (!known.some((k) => Math.abs(k - n) <= 0.51)) {

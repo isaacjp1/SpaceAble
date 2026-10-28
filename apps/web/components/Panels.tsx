@@ -115,7 +115,7 @@ export function newFurniture(s: RoomScenario, kind: (typeof KINDS)[number], labe
     y_cm: Math.max(0, Math.round((s.room.height_cm - h) / 2)),
     rotation_deg: 0, movable: kind !== "obstacle",
     confirmed: false, // preset dimensions are estimates until measured
-    label_source: labelSource,
+    label_source: labelSource, to_place: false,
   };
 }
 

@@ -5,7 +5,7 @@ import type { Furniture } from "@/lib/schema";
 const room = { width_cm: 430, height_cm: 360 };
 const desk: Furniture = {
   id: "desk", label: "Desk", kind: "desk", x_cm: 115, y_cm: 35, width_cm: 110, height_cm: 65,
-  rotation_deg: 0, movable: true, confirmed: true, label_source: "user-provided",
+  rotation_deg: 0, movable: true, confirmed: true, label_source: "user-provided", to_place: false,
 };
 
 describe("geometry-ui", () => {
