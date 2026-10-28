@@ -5,9 +5,12 @@ services:
     runtime: docker
     plan: 0.5c-512mb # the free plan sleeps when idle, which makes the first demo request slow
     region: oregon
-    rootDir: services/planner
+    # No rootDir: with it set, Render resolved these paths under it (services/planner/services/...).
     dockerfilePath: ./services/planner/Dockerfile
     dockerContext: ./services/planner
+    buildFilter: # redeploy only when the planner changes
+      paths:
+        - services/planner/**
     healthCheckPath: /health
     envVars:
       - key: PLANNER_SHARED_SECRET
