@@ -52,6 +52,7 @@ export const RequirementsSchema = z.strictObject({
   turning_diameter_cm: length.nullable().default(null),
   required_destination_ids: z.array(id).max(20).default([]),
   locked_object_ids: z.array(id).max(40).default([]),
+  // Unused: Optimize returns a fewest-changes and a widest-route option. Kept so saved rooms still load.
   optimization_profile: z.enum(["minimal_changes", "max_clearance"]).default("minimal_changes"),
   start_door_id: id.nullable().default(null),
 });
@@ -165,12 +166,15 @@ export interface Move {
   placed?: boolean; // a new piece put here (from_* equal to_*); older results omit it
 }
 
+export const GOALS = ["fewest_changes", "widest_route"] as const;
+
 export interface Alternative {
   id: string;
   layout: Layout;
   moves: Move[];
   validation: ValidationResult;
   cost: { moved_objects: number; displacement_cm: number; route_length_cm: number; total_score: number };
+  best_for?: (typeof GOALS)[number][]; // which goal this option is best at; older results omit it
 }
 
 export type OptimizeStatus =

@@ -79,6 +79,8 @@ class Requirements(Model):
     turning_diameter_cm: Length | None = None  # None = not checked
     required_destination_ids: list[Id] = Field(default_factory=list, max_length=20)
     locked_object_ids: list[Id] = Field(default_factory=list, max_length=MAX_OBJECTS)
+    # Unused: Optimize returns a fewest-changes and a widest-route option. Kept so saved
+    # rooms still load.
     optimization_profile: Literal["minimal_changes", "max_clearance"] = "minimal_changes"
     start_door_id: Id | None = None  # None = first door
 
@@ -178,7 +180,6 @@ class AnalyzeRequest(Model):
 class OptimizeOptions(Model):
     time_limit_s: float = Field(10.0, ge=0.5, le=30.0)
     grid_spacing_cm: float = Field(20.0, ge=10.0, le=50.0)
-    max_alternatives: int = Field(3, ge=1, le=3)
 
 
 class OptimizeRequest(Model):
@@ -256,6 +257,8 @@ class Alternative(Model):
     moves: list[Move]
     validation: ValidationResult  # independent analyze() of exactly this layout
     cost: Cost
+    # Which goal this option is best at; Optimize returns one option per goal.
+    best_for: list[Literal["fewest_changes", "widest_route"]] = Field(default_factory=list)
 
 
 class SearchInfo(Model):

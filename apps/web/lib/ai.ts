@@ -1,103 +1,11 @@
 // Pure helpers for the Meta integrations, shared by API routes and UI.
 // Model output is data to validate; it never decides pass/fail.
 import { z } from "zod";
-import type { Alternative, OptimizationResult, RoomScenario, Status, ValidationResult } from "./schema";
-
-// ---- Muse: text -> constraint proposal -------------------------------------------------
-
-export const PROFILES = ["minimal_changes", "max_clearance"] as const;
+import { GOALS, type Alternative, type OptimizationResult, type RoomScenario, type Status, type ValidationResult } from "./schema";
 
 // An empty enum is invalid JSON Schema, so an empty list allows no items at all.
 export const idList = (ids: string[]) =>
   ids.length ? { type: "array", items: { type: "string", enum: ids } } : { type: "array", maxItems: 0 };
-
-export function constraintSchema(s: RoomScenario) {
-  const properties = {
-    locked_object_ids: idList(s.objects.map((o) => o.id)),
-    required_destination_ids: idList(s.destinations.map((d) => d.id)),
-    route_width_cm: { type: ["number", "null"] },
-    turning_diameter_cm: { type: ["number", "null"] },
-    optimization_profile: { type: "string", enum: [...PROFILES] },
-    clarifying_questions: { type: "array", items: { type: "string" } },
-    unsupported_requests: { type: "array", items: { type: "string" } },
-  };
-  return { type: "object", properties, required: Object.keys(properties), additionalProperties: false };
-}
-
-export function constraintMessages(s: RoomScenario, userText: string) {
-  // No title or free-form notes: only what the model needs to map the request to IDs.
-  const room = {
-    room_cm: [s.room.width_cm, s.room.height_cm],
-    objects: s.objects.map(({ id, label, kind, movable }) => ({ id, label, kind, movable })),
-    destinations: s.destinations.map(({ id, object_id, side }) => ({ id, object_id, side })),
-    current_requirements: {
-      route_width_cm: s.requirements.route_width_cm,
-      turning_diameter_cm: s.requirements.turning_diameter_cm,
-      locked_object_ids: s.requirements.locked_object_ids,
-      required_destination_ids: s.requirements.required_destination_ids,
-      optimization_profile: s.requirements.optimization_profile,
-    },
-  };
-  return [
-    {
-      role: "system" as const,
-      content:
-        "You turn a person's description of their room needs into constraint JSON for a floor-plan " +
-        "checking tool. Start from current_requirements and change only what the request implies; " +
-        "return complete lists. locked_object_ids: furniture the person wants left where it is. " +
-        "required_destination_ids: places they need to reach. Use only the listed IDs. " +
-        "Never invent measurements: route_width_cm and turning_diameter_cm must be null (meaning keep " +
-        "the current value) unless the person states a new number; convert stated inches, feet or " +
-        "metres to centimetres. Ask short " +
-        "clarifying_questions for anything missing or ambiguous. List anything the tool cannot do " +
-        "(structural changes, ramps, medical or equipment advice, code compliance) in " +
-        "unsupported_requests. optimization_profile is minimal_changes unless they ask for the most " +
-        "open space (max_clearance).",
-    },
-    { role: "user" as const, content: JSON.stringify({ room, request: userText }) },
-  ];
-}
-
-const cm = z.number().positive().max(3000).nullable();
-export const ProposalSchema = z.strictObject({
-  locked_object_ids: z.array(z.string()).max(40),
-  required_destination_ids: z.array(z.string()).max(20),
-  route_width_cm: cm,
-  turning_diameter_cm: cm,
-  optimization_profile: z.enum(PROFILES),
-  clarifying_questions: z.array(z.string().max(400)).max(8),
-  unsupported_requests: z.array(z.string().max(400)).max(8),
-});
-export type Proposal = z.infer<typeof ProposalSchema>;
-
-/** Re-validate Muse's reply: schema, known IDs only, and no measurements the text never gave. */
-export function checkProposal(raw: unknown, s: RoomScenario, userText: string):
-  { ok: true; proposal: Proposal } | { ok: false; error: string } {
-  const parsed = ProposalSchema.safeParse(raw);
-  if (!parsed.success) {
-    const i = parsed.error.issues[0];
-    return { ok: false, error: `Muse's reply did not match the constraint schema (${i.path.join(".")}: ${i.message}).` };
-  }
-  const p = parsed.data;
-  const objects = new Set(s.objects.map((o) => o.id));
-  const dests = new Set(s.destinations.map((d) => d.id));
-  const unknown = [
-    ...p.locked_object_ids.filter((i) => !objects.has(i)),
-    ...p.required_destination_ids.filter((i) => !dests.has(i)),
-  ];
-  if (unknown.length) {
-    return { ok: false, error: `Muse referred to unknown id(s): ${unknown.join(", ")}. Nothing was applied.` };
-  }
-  for (const [key, what] of [["route_width_cm", "the route width"], ["turning_diameter_cm", "the turning circle"]] as const) {
-    if (p[key] !== null && p[key] === s.requirements[key]) p[key] = null; // echoing the current value = keep it
-    else if (p[key] !== null && !/\d/.test(userText)) {
-      p.clarifying_questions.push(`Muse suggested ${p[key]} cm for ${what}, but your request has no ` +
-        "measurement. Enter the value you need if you want to change it.");
-      p[key] = null;
-    }
-  }
-  return { ok: true, proposal: p };
-}
 
 // ---- Muse: evidence-grounded explanation ------------------------------------------------
 
@@ -122,7 +30,6 @@ export const EvidenceSchema = z.strictObject({
     route_width_cm: z.number().nullable(),
     door_min_clear_width_cm: z.number().nullable(),
     turning_diameter_cm: z.number().nullable(),
-    optimization_profile: z.enum(PROFILES),
     kept_in_place: z.array(z.string().max(80)).max(40), // labels the person locked
     fixed_furniture: z.array(z.string().max(80)).max(40), // labels marked as not movable
   }),
@@ -131,9 +38,9 @@ export const EvidenceSchema = z.strictObject({
   moves: z.array(z.strictObject({
     label: z.string().max(80), distance_cm: z.number(), turned_to_deg: z.number().nullable(),
   })).max(3),
-  // Where the previewed option ranks among the optimizer's options.
+  // Which goal the previewed option is best at: the optimizer offers one option per goal.
   option: z.strictObject({
-    rank: z.number().int().min(1), of: z.number().int().min(1),
+    best_for: z.array(z.enum(GOALS)).max(2),
     moved_objects: z.number().int().min(0), route_length_cm: z.number(),
   }).nullable(),
   // The optimizer run behind what is on screen, including why it found nothing.
@@ -156,11 +63,11 @@ export function buildEvidence(s: RoomScenario, before: ValidationResult, opt: Op
     widest_route_cm: v.widest_route_cm ?? null,
     warnings: v.warnings.slice(0, 5).map((w) => w.slice(0, 400)),
   });
-  const { route_width_cm, door_min_clear_width_cm, turning_diameter_cm, optimization_profile } = s.requirements;
+  const { route_width_cm, door_min_clear_width_cm, turning_diameter_cm } = s.requirements;
   const label = (id: string) => s.objects.find((o) => o.id === id)?.label ?? id;
   return {
     requirements: {
-      route_width_cm, door_min_clear_width_cm, turning_diameter_cm, optimization_profile,
+      route_width_cm, door_min_clear_width_cm, turning_diameter_cm,
       kept_in_place: s.requirements.locked_object_ids.map(label),
       fixed_furniture: s.objects.filter((o) => !o.movable).map((o) => o.label),
     },
@@ -171,8 +78,8 @@ export function buildEvidence(s: RoomScenario, before: ValidationResult, opt: Op
       distance_cm: m.distance_cm,
       turned_to_deg: m.to_rotation_deg !== m.from_rotation_deg ? m.to_rotation_deg : null,
     })),
-    option: alt && opt ? {
-      rank: opt.alternatives.findIndex((a) => a.id === alt.id) + 1, of: opt.alternatives.length,
+    option: alt ? {
+      best_for: alt.best_for ?? [],
       moved_objects: alt.cost.moved_objects, route_length_cm: alt.cost.route_length_cm,
     } : null,
     search: opt && {
@@ -193,10 +100,10 @@ export function explainMessages(e: Evidence) {
         "device. Use only the evidence JSON. before is the current layout and after the proposed one " +
         "(null when nothing is proposed). widest_route_cm is the widest route the checker verified for " +
         "that layout; compare it with requirements.route_width_cm, the width the person needs. When it " +
-        "is null it was not measured (for example because the layout fails): do not mention it. option " +
-        "says where the proposed layout ranks among the options, ranked by " +
-        "requirements.optimization_profile (minimal_changes = fewest changes, max_clearance = widest " +
-        "route). requirements.kept_in_place lists furniture the person asked to keep where it is and " +
+        "is null it was not measured (for example because the layout fails): do not mention it. The " +
+        "search offers one option with the fewest changes and one with the widest route; option.best_for " +
+        "says which of those goals the proposed layout is (fewest_changes, widest_route or both). " +
+        "requirements.kept_in_place lists furniture the person asked to keep where it is and " +
         "fixed_furniture lists pieces marked as fixed; the search never moves either. search " +
         "summarises the search for rearrangements, including why it found none; if it " +
         "found options but none is proposed, say they can preview one. Cover what the person most " +
@@ -212,7 +119,7 @@ export function explainMessages(e: Evidence) {
 
 type ResultEv = Evidence["before"];
 const required = (r: ResultEv, status: Status) => r.checks.filter((c) => c.required && c.status === status);
-const RANKED_BY = { minimal_changes: "fewest changes", max_clearance: "widest route" } as const;
+const GOAL_NAMES = { fewest_changes: "fewest changes", widest_route: "widest route" } as const;
 
 function summary(r: ResultEv): string[] {
   if (r.status === "pass") {
@@ -233,9 +140,8 @@ function searchSummary(e: Evidence): string[] {
 
 /** Deterministic explanation built only from evidence strings and numbers. Always available. */
 export function templateExplanation(e: Evidence): string {
-  const option = e.option
-    ? ` (option ${e.option.rank} of ${e.option.of}, ranked by ${RANKED_BY[e.requirements.optimization_profile]})`
-    : "";
+  const option = e.option?.best_for.length
+    ? ` (the ${e.option.best_for.map((g) => GOAL_NAMES[g]).join(" and ")} option)` : "";
   const { kept_in_place, fixed_furniture } = e.requirements;
   const kept = [...new Set([...kept_in_place, ...fixed_furniture])];
   const parts = e.after

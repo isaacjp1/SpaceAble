@@ -88,6 +88,23 @@ describe("POST /api/ai/assistant", () => {
     expect(run?.type === "run" && run.run.changes).toEqual(["Route width 91.44 cm", "Kept in place: Bed, Dresser"]);
   });
 
+  it("carries out a command with change_room, and later calls start from the changed room", async () => {
+    const chair = { label: "Chair", kind: "chair", width_cm: 50, depth_cm: 50, approach_side: null, x_cm: 0, y_cm: 300 };
+    const { muse, plannerCalls } = mock([
+      { tools: [{ name: "change_room", args: { ...keep, add_furniture: [chair],
+        move: [{ object_id: "dresser", x_cm: 90, y_cm: 300, rotation_deg: 0 }] } }] },
+      { tools: [{ name: "check_layout", args: keep }] },
+      { text: "I moved the Dresser to (90, 300) and added the Chair. The room passes." },
+    ], { analyze: validation("pass", 99) });
+    const { events, answer } = await ask("Move the dresser to the bottom left and add my 50 cm chair.");
+    const changed = events.find((e) => e.type === "run" && e.run.tool === "change_room");
+    expect(changed?.type === "run" && changed.run.changes).toEqual(["Dresser moved to (90, 300)", "New Chair 50 × 50 cm at (0, 300)"]);
+    // the follow-up check ran on the changed room, and Muse could now address the new chair
+    expect(plannerCalls[1].body.scenario.objects.map((o) => o.id)).toEqual(["bed", "desk", "dresser", "new-chair"]);
+    expect(JSON.stringify(muse[1].tools)).toContain('"new-chair"');
+    expect(answer.source).toBe("muse");
+  });
+
   it("sends an invented width back to Muse instead of running it", async () => {
     const { muse, plannerCalls } = mock([
       { tools: [{ name: "find_layouts", args: { ...keep, route_width_cm: 100 } }] },

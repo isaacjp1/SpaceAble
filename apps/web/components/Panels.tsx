@@ -216,14 +216,6 @@ export function RequirementsPanel({ scenario, update }: { scenario: RoomScenario
       <NumberField label="Turning circle diameter (optional)" value={req.turning_diameter_cm} nullable
         onCommit={(v) => set({ turning_diameter_cm: v })}
         hint="Leave empty to skip. 152.4 cm (60 in) is one published reference, not a guarantee for your device." />
-      <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-        When optimizing, prefer
-        <select className={input} value={req.optimization_profile}
-          onChange={(e) => set({ optimization_profile: e.target.value as typeof req.optimization_profile })}>
-          <option value="minimal_changes">Fewest changes</option>
-          <option value="max_clearance">Most open space (widest route)</option>
-        </select>
-      </label>
       <div>
         <p className="mb-1 text-xs font-medium text-slate-600">Places you need to reach</p>
         {!scenario.destinations.length && (

@@ -4,10 +4,10 @@ import { expect, test } from "@playwright/test";
 test("before/after compare shows both planner results side by side", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Optimize" }).click();
-  await page.getByRole("listitem").filter({ hasText: "Option 1" }).getByRole("button", { name: "Preview" }).click();
+  await page.getByRole("listitem").filter({ hasText: "Fewest changes" }).getByRole("button", { name: "Preview" }).click();
   await page.getByRole("button", { name: "Side by side" }).click();
   const before = page.locator("figure").filter({ hasText: "Before" });
-  const after = page.locator("figure").filter({ hasText: "After: option 1" });
+  const after = page.locator("figure").filter({ hasText: "After: fewest changes" });
   await expect(before.getByText("Fail")).toBeVisible();
   await expect(after.getByText("Pass")).toBeVisible();
   await expect(after.getByText(/Verified 80 cm route to desk-approach/)).toBeVisible();

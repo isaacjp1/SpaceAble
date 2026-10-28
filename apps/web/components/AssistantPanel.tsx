@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { adaCounts, adaReport } from "@/lib/ada";
-import { type AssistantEvent, type AssistantRun, MAX_HISTORY, type Turn } from "@/lib/assistant";
+import { type AssistantEvent, type AssistantRun, MAX_HISTORY, type Turn, widestOption } from "@/lib/assistant";
 import type { ApiError, OptimizationResult, RoomScenario, ValidationResult } from "@/lib/schema";
 import { MicButton } from "./MicButton";
 import { Section } from "./Panels";
@@ -26,7 +26,7 @@ const what = (changes: string[] | null) => (changes?.length ? changes.join("; ")
 
 const VERB: Record<AssistantRun["tool"], [string, string]> = { // [in progress, done]
   check_layout: ["Checking", "Checked"], find_layouts: ["Searching", "Searched"],
-  ada_reference_check: ["Running", "Ran"],
+  change_room: ["Changing your room", "Changed your room"], ada_reference_check: ["Running", "Ran"],
 };
 
 export function outcome(run: AssistantRun): string {
@@ -34,14 +34,14 @@ export function outcome(run: AssistantRun): string {
     const rows = adaReport(run.scenario, run.result as ValidationResult);
     return `${adaCounts(rows).passed} of ${rows.length} ADA reference rules pass (not a compliance determination).`;
   }
-  if (run.tool === "check_layout") {
+  if (run.tool !== "find_layouts") { // check_layout, change_room
     const v = run.result as ValidationResult;
     const verdict = v.status === "pass" ? "Passes" : v.status === "fail" ? "Does not pass" : "Needs more information";
     return `${verdict}${v.widest_route_cm !== null ? `; routes verified up to ${v.widest_route_cm} cm wide` : ""}.`;
   }
   const o = run.result as OptimizationResult;
-  const best = o.alternatives.find((a) => a.moves.length)?.validation.widest_route_cm;
-  return `${o.message}${best ? ` Option 1: routes verified up to ${best} cm wide.` : ""}`;
+  const best = widestOption(o)?.validation.widest_route_cm;
+  return `${o.message}${best ? ` Widest-route option: routes verified up to ${best} cm wide.` : ""}`;
 }
 
 /** Fold one streamed event into the exchange: the step list drives the progress bar. */
@@ -69,9 +69,11 @@ function fold(t: Exchange, e: AssistantEvent): Exchange {
   }
 }
 
-/** Ask Muse Spark about the room. Muse runs planner checks; nothing changes until a what-if is loaded. */
-export function AssistantPanel({ scenario, metaConfigured, onLoad }: {
+/** Ask Muse Spark about the room, or tell it what to change. Questions run planner checks that load as
+ * what-ifs; a command's change_room result is applied to the room when the answer arrives. */
+export function AssistantPanel({ scenario, metaConfigured, onLoad, onChange }: {
   scenario: RoomScenario; metaConfigured: boolean; onLoad: (run: AssistantRun) => void;
+  onChange: (run: AssistantRun, base: RoomScenario) => void; // base: the room the question was about
 }) {
   const [question, setQuestion] = useState("");
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
@@ -79,6 +81,9 @@ export function AssistantPanel({ scenario, metaConfigured, onLoad }: {
   const abort = useRef<AbortController | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   const update = (fn: (t: Exchange) => Exchange) => setExchanges((xs) => [...xs.slice(0, -1), fn(xs[xs.length - 1])]);
+  // The answer can take a minute; by then the room may have changed, so use the latest handler.
+  const change = useRef(onChange);
+  useEffect(() => { change.current = onChange; });
 
   const ask = async () => {
     const room = JSON.stringify(scenario);
@@ -86,6 +91,8 @@ export function AssistantPanel({ scenario, metaConfigured, onLoad }: {
       question: x.question, answer: x.answer!.text, same_room: x.room === room, results: x.runs.map((r) => r.summary),
     }));
     const q = question.trim();
+    const base = scenario;
+    const changed: AssistantRun[] = [];
     setExchanges((xs) => [...xs, { question: q, room, steps: [], runs: [], answer: null, error: null }]);
     setQuestion("");
     setBusy(true);
@@ -109,9 +116,14 @@ export function AssistantPanel({ scenario, metaConfigured, onLoad }: {
         buffer += value;
         const lines = buffer.split("\n");
         buffer = lines.pop()!;
-        for (const line of lines) if (line.trim()) update((t) => fold(t, JSON.parse(line) as AssistantEvent));
+        for (const e of lines.filter((l) => l.trim()).map((l) => JSON.parse(l) as AssistantEvent)) {
+          if (e.type === "run" && e.run.tool === "change_room") changed.push(e.run);
+          update((t) => fold(t, e));
+        }
       }
       update((t) => (t.answer || t.error ? t : { ...t, error: "The answer was cut off. Try again." }));
+      // Each change builds on the one before, so the last room holds them all.
+      if (changed.length) change.current({ ...changed.at(-1)!, changes: changed.flatMap((r) => r.changes) }, base);
     } catch {
       update((t) => ({ ...t, error: ctrl.signal.aborted ? "Cancelled." : "Could not reach the SpaceAble server." }));
     } finally {
@@ -121,24 +133,24 @@ export function AssistantPanel({ scenario, metaConfigured, onLoad }: {
   };
 
   return (
-    <Section title="Ask about your room">
+    <Section title="Ask or tell Muse">
       {exchanges.length > 0 && (
         <ol className="flex flex-col gap-3">
           {exchanges.map((x, i) => <ExchangeView key={i} x={x} live={busy && i === exchanges.length - 1} onLoad={onLoad} />)}
         </ol>
       )}
       <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-        {exchanges.length ? "Ask a follow-up" : "Ask a question"}
-        <textarea ref={box} value={question} onChange={(e) => setQuestion(e.target.value)} rows={2} maxLength={1000}
-          placeholder="What if I keep the dresser where it is too? I need 36 inches."
+        {exchanges.length ? "Ask or tell Muse something else" : "Ask a question, or say what to change"}
+        <textarea ref={box} value={question} onChange={(e) => setQuestion(e.target.value)} rows={3} maxLength={1000}
+          placeholder="Move the desk against the right wall. Or ask: would a 100 by 40 cm bookshelf fit?"
           className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-2 focus:outline-indigo-500" />
       </label>
       <div className="flex flex-wrap items-center gap-2">
-        <MicButton disabled={!metaConfigured || busy} purpose="your question"
+        <MicButton disabled={!metaConfigured || busy} purpose="your request"
           keywords={[...new Set(scenario.objects.map((o) => o.label)), "wheelchair", "inches", "centimetres"]}
           onTranscript={(t) => { setQuestion((q) => (q.trim() ? `${q.trim()} ${t}` : t).slice(0, 1000)); box.current?.focus(); }} />
         <button className={button} disabled={!metaConfigured || busy || question.trim().length < 3} onClick={ask}>
-          {busy ? "Working…" : "Ask"}
+          {busy ? "Working…" : "Send"}
         </button>
         {busy && <button className={button} onClick={() => abort.current?.abort()}>Cancel</button>}
         {exchanges.length > 0 && !busy && (
@@ -147,8 +159,8 @@ export function AssistantPanel({ scenario, metaConfigured, onLoad }: {
       </div>
       <p className="text-xs text-slate-500">
         {metaConfigured
-          ? "Muse Spark runs planner checks to answer. Nothing changes in your room unless you load a what-if."
-          : "Needs MODEL_API_KEY on the server."}
+          ? "Muse Spark answers questions with planner checks you can load as what-ifs, and makes the changes you ask for. You can undo a change."
+          : "Needs MODEL_API_KEY on the server. You can still edit the room and your clearance needs by hand."}
       </p>
     </Section>
   );
@@ -203,7 +215,9 @@ function ExchangeView({ x, live, onLoad }: { x: Exchange; live: boolean; onLoad:
                   : (run.result as OptimizationResult).alternatives.length ? "pass" : "fail"} />
               </span>
               <span>{outcome(run)}</span>
-              <button className={`${button} self-start`} onClick={() => onLoad(run)}>Load this what-if</button>
+              {run.tool !== "change_room" && (
+                <button className={`${button} self-start`} onClick={() => onLoad(run)}>Load this what-if</button>
+              )}
             </li>
           ))}
         </ul>

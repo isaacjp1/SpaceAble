@@ -3,27 +3,19 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as explain } from "@/app/api/ai/explain/route";
-import { POST as parseRequest } from "@/app/api/ai/parse-request/route";
 import { POST as segmentRoute } from "@/app/api/ai/segment/route";
 import { POST as transcribe } from "@/app/api/ai/transcribe/route";
 import { encodeWav } from "@/lib/wav";
 
-const scenario = JSON.parse(readFileSync(
-  path.join(import.meta.dirname, "../../../shared/fixtures/canonical-bedroom.json"), "utf8"));
 const json = (url: string, body: unknown) =>
   new Request(`http://app${url}`, { method: "POST", body: JSON.stringify(body) });
 const completion = (content: string) => Response.json({
   id: "c1", object: "chat.completion", created: 0, model: "muse-spark-1.3",
   choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content } }],
 });
-const proposal = {
-  locked_object_ids: ["bed"], required_destination_ids: ["desk-approach"], route_width_cm: null,
-  turning_diameter_cm: null, optimization_profile: "minimal_changes",
-  clarifying_questions: ["What route width do you need?"], unsupported_requests: [],
-};
 const evidence = {
   requirements: { route_width_cm: 80, door_min_clear_width_cm: 80, turning_diameter_cm: null,
-    optimization_profile: "minimal_changes", kept_in_place: ["Bed"], fixed_furniture: [] },
+    kept_in_place: ["Bed"], fixed_furniture: [] },
   before: { status: "fail", checks: [{ id: "route-door-1-to-desk-approach", status: "fail", required: true,
     measured_cm: null, required_cm: 80, message: "No verified 80 cm route from door-1." }],
     widest_route_cm: null, warnings: [] },
@@ -34,43 +26,6 @@ beforeEach(() => vi.stubEnv("MODEL_API_KEY", "test-key"));
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
-});
-
-describe("POST /api/ai/parse-request", () => {
-  it("returns META_NOT_CONFIGURED without a key, never a made-up proposal", async () => {
-    vi.stubEnv("MODEL_API_KEY", "");
-    const res = await parseRequest(json("/api/ai/parse-request", { scenario, userText: "keep my bed" }));
-    expect(res.status).toBe(503);
-    expect((await res.json()).error.code).toBe("META_NOT_CONFIGURED");
-  });
-
-  it("returns a validated proposal and keeps a missing width missing", async () => {
-    const fetch = vi.fn().mockResolvedValue(completion(JSON.stringify(proposal)));
-    vi.stubGlobal("fetch", fetch);
-    const res = await parseRequest(json("/api/ai/parse-request",
-      { scenario, userText: "Keep my bed where it is, but make the route to my desk clearer." }));
-    expect(res.status).toBe(200);
-    expect((await res.json()).proposal).toEqual(proposal);
-    const sent = JSON.parse(fetch.mock.calls[0][1].body);
-    expect(sent.response_format.type).toBe("json_schema");
-    expect(JSON.stringify(sent.messages)).not.toContain("Sample Bedroom"); // title is not sent
-  });
-
-  it("rejects a proposal naming furniture that does not exist", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
-      completion(JSON.stringify({ ...proposal, locked_object_ids: ["piano"] }))));
-    const res = await parseRequest(json("/api/ai/parse-request", { scenario, userText: "keep the piano" }));
-    expect(res.status).toBe(502);
-    expect((await res.json()).error).toMatchObject({ code: "VALIDATION_ERROR", message: expect.stringContaining("piano") });
-  });
-
-  it("maps an upstream 429 to a polite retryable error", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => Response.json(
-      { error: { message: "slow down" } }, { status: 429, headers: { "retry-after-ms": "1" } })));
-    const res = await parseRequest(json("/api/ai/parse-request", { scenario, userText: "keep my bed" }));
-    expect(res.status).toBe(429);
-    expect((await res.json()).error).toMatchObject({ code: "META_RATE_LIMITED", retryable: true });
-  });
 });
 
 describe("POST /api/ai/explain", () => {
@@ -85,6 +40,13 @@ describe("POST /api/ai/explain", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(completion("Your route is now 120 cm wide.")));
     const body = await (await explain(json("/api/ai/explain", { evidence }))).json();
     expect(body).toMatchObject({ source: "template", note: expect.stringContaining("120") });
+  });
+
+  it("maps an upstream 429 to its error code and still answers", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => Response.json(
+      { error: { message: "slow down" } }, { status: 429, headers: { "retry-after-ms": "1" } })));
+    const body = await (await explain(json("/api/ai/explain", { evidence }))).json();
+    expect(body).toMatchObject({ source: "template", note: expect.stringContaining("META_RATE_LIMITED") });
   });
 
   it("returns a grounded Muse explanation as Muse's", async () => {

@@ -15,6 +15,15 @@ const HEADLINE: Record<OptimizationResult["status"], string> = {
   error: "Optimization failed",
 };
 
+const GOAL = { fewest_changes: "fewest changes", widest_route: "widest route" } as const;
+
+/** "Fewest changes", "Widest route" or both; "Current layout" when nothing moves. */
+export function optionName(alt: Alternative, i: number): string {
+  if (!alt.moves.length) return "Current layout";
+  const goals = (alt.best_for ?? []).map((g) => GOAL[g]).join(" and ");
+  return goals ? goals[0].toUpperCase() + goals.slice(1) : `Option ${i + 1}`; // older results have no goals
+}
+
 export function AlternativesPanel({ result, stale, scenario, previewId, onPreview, onUse }: {
   result: OptimizationResult; stale: boolean; scenario: RoomScenario; previewId: string | null;
   onPreview: (id: string | null) => void; onUse: (alt: Alternative) => void;
@@ -49,7 +58,7 @@ export function AlternativesPanel({ result, stale, scenario, previewId, onPrevie
             <li key={alt.id} className={`rounded border p-2 ${active ? "border-indigo-500 bg-indigo-50" : "border-slate-200 bg-white"}`}>
               <div className="flex items-start justify-between gap-2">
                 <span className="text-sm font-medium text-slate-800">
-                  {alt.moves.length ? `Option ${i + 1}` : "Current layout"}
+                  {optionName(alt, i)}
                   <span className="font-normal text-slate-500">
                     {" "}· {alt.cost.moved_objects} moved · score {alt.cost.total_score}
                   </span>

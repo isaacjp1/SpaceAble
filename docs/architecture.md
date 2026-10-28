@@ -11,11 +11,11 @@ Next.js API routes  (server-only MODEL_API_KEY)
    ├─ /api/health              → planner reachability + whether Meta is configured
    ├─ /api/planner/analyze     → FastAPI POST /v1/planner/analyze
    ├─ /api/planner/optimize    → FastAPI POST /v1/planner/optimize
-   ├─ /api/ai/parse-request    → Muse Spark 1.3, json_schema output (proposal for review)
    ├─ /api/ai/explain          → Muse Spark 1.3, evidence-only, grounding-checked
    ├─ /api/ai/segment          → SAM 3.1 + @meta-sam/parser (boxes + mask paths)
    ├─ /api/ai/transcribe       → Muse Voice Transcribe (WAV recording → text for review)
    └─ /api/ai/assistant        → Muse Spark with planner tools (calls analyze/optimize server-side;
+                                  answers questions, carries out commands with change_room;
                                   streams progress as newline-delimited JSON)
    ▼
 FastAPI planner (Python 3.12, Pydantic v2, Shapely 2)
@@ -131,14 +131,14 @@ until it does. The route's `min_clearance_cm` can't serve here: the shortest pat
 furniture, so it is always about half the required width. The padding that keeps free space
 conservative also makes this value slightly low (a 100 cm gap reports 99 cm).
 
-**`optimization_profile: max_clearance`** ("most open space") ranks by that width instead of
-cost. The search keeps going until 12 verified, diverse layouts are found (`CLEARANCE_POOL`) or
-the time limit is hit. They are sorted widest first, with ties broken by cost. A layout is
-skipped if a wider or equally wide one already moves the same pieces or a subset of them.
-The pool is collected in cost order, so this is the widest of the cheapest layouts, not
-the widest possible one. If the current layout already passes, the profile still searches,
-keeps only layouts with a wider route than the current one, and returns the current layout
-when it finds none.
+**Two options, one per goal.** Optimize returns the layout with the fewest changes and the
+layout with the widest route, each tagged in `best_for` (one option tagged with both when the
+same layout wins). The search keeps going until 12 verified, diverse layouts are found (`POOL`)
+or the time limit is hit. The cheapest by cost is the fewest-changes option; the widest, with
+ties broken by cost, is the widest-route option. The pool is collected in cost order, so this
+is the widest of the cheapest layouts, not the widest possible one. If the current layout
+already passes, it is the fewest-changes option, and the search keeps only layouts with a wider
+route than it. `optimization_profile` is still accepted in saved rooms but no longer used.
 
 **New pieces (`to_place`).** A piece the person doesn't own yet carries `to_place: true`, and
 its position is ignored. `analyze` leaves it out, along with its approach zones, and reports it
@@ -347,18 +347,18 @@ looked doubtful, both options did share 99.44 cm.
 
 | Route | What the model does | What stops it overreaching |
 | --- | --- | --- |
-| `parse-request` | Muse turns a sentence into `{locked_object_ids, required_destination_ids, route_width_cm, turning_diameter_cm, optimization_profile, clarifying_questions, unsupported_requests}` | The JSON schema has enums of the scenario's real IDs, and Zod re-validates the reply; unknown IDs are rejected (502, nothing applied). A width equal to the current value means "keep". A width when the text has no digits becomes a clarifying question instead of a value. The user edits and approves the proposal in a review form; nothing is applied automatically. The room title is never sent |
 | `explain` | Muse writes 3–6 sentences from the planner's evidence: checks before and after, moves, the widest verified route, the option's rank and how options were ranked, furniture kept in place or fixed, the search outcome (including why it found nothing), planner warnings and assumptions | `checkExplanation` rejects any number not in the evidence (±0.5 tolerance; integers ≤ 3 allowed as counts) and any sentence with a compliance, certification, guarantee or safety claim without a negation. A rejected draft is replaced by the deterministic template, with the reason shown. With no key or an upstream error the template is returned too, always labelled "Built-in explanation (no AI)" |
 | `segment` | SAM 3.1 segments 1–3 concepts, one request each, in parallel | The image type comes from its magic bytes (JPEG/PNG), at most 5 MB and 4096 px. The browser re-encodes the photo (max 1600 px), which drops EXIF/GPS. It is sent as a base64 data URL and never stored or logged. Detections only annotate the photo; the user links them to plan furniture, and "add as new" creates unmeasured (`confirmed: false`, `label_source: ai-inferred`) furniture |
 | `transcribe` | Muse Voice Transcribe turns a spoken request into text (`PUSH_TO_TALK`), with the room's furniture names as recognition keywords | The browser records with `MediaRecorder`, then decodes and resamples to 16 kHz mono 16-bit WAV (`OfflineAudioContext`, capped at 60 s), because the API takes only WAV. The server checks the file's own RIFF chunks (PCM, mono, 16-bit, 16 or 24 kHz, at most 60 s) before calling Meta, and filters keywords to short names (at most 20). The transcript only fills the text box: the person reviews or edits it and decides whether to send it to Muse Spark. Tap to start and tap to stop, no press-and-hold. Audio is held in memory for the request only, never stored or logged. The page's `Permissions-Policy` allows the microphone for this site only |
-| `assistant` | Muse Spark answers questions about the room by calling `check_layout` (analyze) and `find_layouts` (optimize) on what-if copies of the room: new widths, locked pieces, places to reach, removals, moves, and new furniture (placed by the planner in `find_layouts`). Muse can ask for several calls at once (run one after another), over up to 3 rounds; the last call offers no tools, so Muse must answer. Progress, each planner run and the answer stream to the browser as newline-delimited JSON | Tool inputs are strict schemas with the room's real ids, re-validated with Zod. A wrong id or malformed input goes back to Muse as a tool error. A route width, turning circle or new-piece size must match a number the person wrote (with inch, foot, metre and millimetre conversions); otherwise the tool tells Muse to ask. At most 4 calls a round, 8 planner runs a question, `find_layouts` limited to 5 s, a 100 s deadline, and 6 questions a minute per IP. The answer goes through the same number check as Explain, against the room, this question's runs, earlier runs on the same room, and the person's numbers; a failing answer is replaced by a planner-only summary, and the runs stay. An answer with no planner run is labelled so. Nothing changes until the person loads a what-if, which they can undo with **Back to my room**; autosave pauses while one is loaded |
+| `assistant` | Muse Spark decides whether the person is asking or telling. It answers questions by calling `check_layout` (analyze) and `find_layouts` (optimize) on what-if copies of the room, and carries out commands with `change_room`, which takes the same changes as `check_layout` and makes them to the room itself (later calls start from the changed room). The changes: new widths, locked pieces, places to reach, removals, moves, and new furniture (placed by the planner in `find_layouts`). Muse can ask for several calls at once (run one after another), over up to 3 rounds; the last call offers no tools, so Muse must answer. Progress, each planner run and the answer stream to the browser as newline-delimited JSON | Tool inputs are strict schemas with the room's real ids, re-validated with Zod. A wrong id or malformed input goes back to Muse as a tool error. A route width, turning circle or new-piece size must match a number the person wrote (with inch, foot, metre and millimetre conversions); otherwise the tool tells Muse to ask. At most 4 calls a round, 8 planner runs a question, `find_layouts` limited to 5 s, a 100 s deadline, and 6 questions a minute per IP. The answer goes through the same number check as Explain, against the room, this question's runs, earlier runs on the same room, and the person's numbers; a failing answer is replaced by a planner-only summary, and the runs stay. An answer with no planner run is labelled so. A question changes nothing until the person loads a what-if, which they can leave with **Back to my room**; autosave pauses while one is loaded. A command's changed room is applied when the answer arrives, with **Undo**, unless the room was edited meanwhile or a what-if is on screen: then it is offered as a what-if instead. `change_room` can't switch to the ADA copy of the room |
 
 Errors follow the contract: no key gives 503 `META_NOT_CONFIGURED`, upstream 429 gives 429 `META_RATE_LIMITED`
 (retryable), and network, timeout or 5xx give `UPSTREAM_UNAVAILABLE`. There is also an in-memory limit of 20 AI
 requests per minute per IP. Only error class names are logged, never prompts, photos or replies. Tests mock
 Meta at the fetch layer; Playwright mocks `/api/ai/*`.
 
-Live-verified 2026-10-26 through the app routes (`npm run dev`, real key):
+Live-verified 2026-10-26 through the app routes (`npm run dev`, real key). `parse-request` was later
+folded into the assistant's `change_room`:
 - `parse-request`, "Keep my bed where it is, but make the route to my desk clearer." gave bed locked,
   desk-approach required, both widths null (keep current), no questions, in 3.9 s.
 - `parse-request`, "…need 36 inches of clear width to reach my desk… leave the bed alone. Can you also check

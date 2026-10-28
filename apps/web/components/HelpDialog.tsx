@@ -11,11 +11,11 @@ export function HelpDialog({ ref }: { ref: React.Ref<HTMLDialogElement> }) {
         <ol className="list-decimal space-y-1 pl-5">
           <li>Start from the sample bedroom, or set your own room size, door and furniture on the left. Measure what you can and tick “confirmed”.</li>
           <li>For each place you need to reach, select the furniture and choose <strong>Add approach zone</strong>, then pick the side you approach from.</li>
-          <li>Set your route width (and a turning circle if you want one) under <strong>Your clearance needs</strong>, or describe your needs in a sentence (type it, or press <strong>Speak</strong> and press again to stop) and review what Meta Muse Spark proposes before applying it.</li>
+          <li>Set your route width (and a turning circle if you want one) under <strong>Your clearance needs</strong>, or tell Muse in a sentence (see below).</li>
           <li>Press <strong>Analyze</strong>. Every check is computed by the planner from your measurements, never by the AI.</li>
-          <li>Press <strong>Optimize</strong> to search for up to three verified rearrangements. Preview one, compare it side by side, then <strong>Use this layout</strong>.</li>
+          <li>Press <strong>Optimize</strong> to search for verified rearrangements. You get the one with the fewest changes and the one with the widest route (one option when a layout is both). Preview one, compare it side by side, then <strong>Use this layout</strong>.</li>
           <li>Press <strong>Explain</strong> for a plain-language summary that may only quote the planner’s numbers.</li>
-          <li>Or <strong>Ask about your room</strong>, for example “Would a 100 by 40 cm bookshelf fit?”. Meta Muse Spark runs planner checks to answer, and each check becomes a what-if you can load and undo with <strong>Back to my room</strong>. It asks for any measurement you didn’t give.</li>
+          <li>Or <strong>Ask or tell Muse</strong> (type, or press <strong>Speak</strong> and press again to stop). Ask a question, such as “Would a 100 by 40 cm bookshelf fit?”, and Meta Muse Spark runs planner checks to answer; each check becomes a what-if you can load and leave with <strong>Back to my room</strong>. Or tell it what to change, such as “Move the desk against the right wall” or “I need 36 inches”, and it changes your room and checks it; <strong>Undo</strong> puts it back. It asks for any measurement you didn’t give.</li>
           <li>Optionally open <strong>Photo</strong> to have SAM 3.1 outline furniture in a photo, and link what it finds to your plan.</li>
           <li><strong>Save JSON</strong> or <strong>Print summary</strong> to keep the result. Your latest room is also kept in this browser.</li>
         </ol>
