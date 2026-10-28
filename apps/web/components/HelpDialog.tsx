@@ -21,6 +21,8 @@ export function HelpDialog({ ref }: { ref: React.Ref<HTMLDialogElement> }) {
         </ol>
         <h3 className="font-semibold text-slate-900">Keyboard</h3>
         <p>Tab to a piece of furniture on the plan, then use arrow keys to move it 5 cm (Shift for 20 cm), R to rotate and Delete to remove. Every value can also be typed in the panels.</p>
+        <h3 className="font-semibold text-slate-900">Scanning a room</h3>
+        <p>In the SpaceAble iPhone app, on an iPhone or iPad with a LiDAR scanner, <strong>Scan room</strong> measures a rectangular room with Apple’s RoomPlan and opens it here as a draft. Everything in it starts unconfirmed: check the room size and each piece, and measure door widths with a tape measure, because the scan measures the door frame, which is wider than the clear opening. The scan is converted on your phone and not uploaded.</p>
         <h3 className="font-semibold text-slate-900">What the checks assume</h3>
         <ul className="list-disc space-y-1 pl-5">
           <li>A flat 2D plan: rectangles for furniture, no heights, knee or toe clearance.</li>

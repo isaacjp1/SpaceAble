@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import fixture from "../../../shared/fixtures/canonical-bedroom.json";
 import { buildEvidence } from "@/lib/ai";
@@ -10,6 +10,7 @@ import {
   type ValidationResult,
 } from "@/lib/schema";
 import { ADA_CHANGES, adaReport, adaScenario } from "@/lib/ada";
+import { capturedRoomToScenario } from "@/lib/roomplan";
 import type { AssistantRun } from "@/lib/assistant";
 import { type Explanation, ExplanationView, RequestPanel } from "./AiPanels";
 import { AlternativesPanel } from "./AlternativesPanel";
@@ -35,6 +36,7 @@ const storage = {
   remove: (k: string) => { try { localStorage.removeItem(k); } catch { /* ignore */ } listeners.forEach((l) => l()); },
   subscribe: (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; },
 };
+const never = () => () => {};
 
 type Health = { planner: "ok" | "unreachable"; meta_configured: boolean };
 type Analysis = { scenario: RoomScenario; result: ValidationResult };
@@ -69,6 +71,9 @@ export function Planner() {
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Inside the iPhone app, which adds a native RoomPlan scanner.
+  const inApp = useSyncExternalStore(never, () => Boolean(window.webkit?.messageHandlers?.scanRoom), () => false);
+  const [scanWarnings, setScanWarnings] = useState<string[] | null>(null); // a scanned draft to review
 
   useEffect(() => {
     fetch("/api/health").then((r) => r.json()).then(setHealth)
@@ -107,7 +112,7 @@ export function Planner() {
   // outlines of where moved pieces were; a newly placed piece was nowhere before
   const ghosts = preview ? scenario.objects.filter((o) => !o.to_place && preview.moves.some((m) => m.object_id === o.id)) : [];
 
-  const clearResults = () => {
+  const clearResults = useCallback(() => {
     setAnalysis(null);
     setOptimization(null);
     setPreviewId(null);
@@ -115,7 +120,27 @@ export function Planner() {
     setError(null);
     setWhatIf(null);
     setAda(null);
-  };
+    setScanWarnings(null);
+  }, []);
+
+  // A raw RoomPlan scan, from the app's scanner or Load JSON, becomes a draft plan. It stays in
+  // the browser: only the converted scenario ever reaches the planner.
+  const keep = scenario.requirements;
+  const importScan = useCallback((raw: unknown): string | null => {
+    try {
+      const { scenario: next, warnings } = capturedRoomToScenario(raw, keep);
+      setScenario(next);
+      clearResults();
+      setScanWarnings(warnings);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Could not read the scan.";
+    }
+  }, [keep, clearResults]);
+  useEffect(() => {
+    window.spaceableImportScan = importScan;
+    return () => { delete window.spaceableImportScan; };
+  }, [importScan]);
 
   // The what-if room and its planner result go on screen together, so neither reads as stale.
   const loadWhatIf = (run: Pick<AssistantRun, "tool" | "changes" | "scenario" | "result">) => {
@@ -277,6 +302,11 @@ export function Planner() {
   const importJson = async (file: File) => {
     try {
       const data = JSON.parse(await file.text());
+      if (Array.isArray(data?.walls) && Array.isArray(data?.objects)) {
+        const problem = importScan(data);
+        if (problem) setError(`Could not load ${file.name}: ${problem}`);
+        return;
+      }
       const parsed = RoomScenarioSchema.safeParse(data?.scenario ?? data);
       if (!parsed.success) {
         const i = parsed.error.issues[0];
@@ -308,6 +338,9 @@ export function Planner() {
           <button className={button} onClick={() => fileInput.current?.click()}>Load JSON</button>
           <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" aria-hidden="true"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) importJson(f); e.target.value = ""; }} />
+          {inApp && (
+            <button className={button} onClick={() => window.webkit?.messageHandlers?.scanRoom?.postMessage(null)}>Scan room</button>
+          )}
           <button className={button} onClick={() => { setScenario(SAMPLE); clearResults(); }}>
             Reset sample
           </button>
@@ -320,6 +353,19 @@ export function Planner() {
             <button className={button} onClick={() => { setScenario(restorable); clearResults(); storage.remove(PREVIOUS); }}>Restore it</button>
             <button className={button} onClick={() => storage.remove(PREVIOUS)}>Dismiss</button>
           </span>
+        </div>
+      )}
+      {scanWarnings && (
+        <div role="status" className="flex flex-wrap items-start gap-2 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          <div className="flex flex-col gap-1">
+            <span>This plan is a draft from your room scan. Check the room size, confirm each piece and door, and add the
+              places you need to reach. Measure doors with a tape measure: the scan measures the frame, which is wider
+              than the clear opening.</span>
+            {scanWarnings.length > 0 && (
+              <ul className="list-disc pl-5">{scanWarnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+            )}
+          </div>
+          <button className={`${button} ml-auto`} onClick={() => setScanWarnings(null)}>Dismiss</button>
         </div>
       )}
 
