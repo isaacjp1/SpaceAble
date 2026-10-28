@@ -9,8 +9,10 @@ import {
   RoomScenarioSchema, type Alternative, type ApiError, type OptimizationResult, type RoomScenario,
   type ValidationResult,
 } from "@/lib/schema";
+import type { AssistantRun } from "@/lib/assistant";
 import { type Explanation, ExplanationView, RequestPanel } from "./AiPanels";
 import { AlternativesPanel } from "./AlternativesPanel";
+import { AssistantPanel } from "./AssistantPanel";
 import { FurniturePanel, RequirementsPanel, RoomPanel, Section, type Update } from "./Panels";
 import { HelpDialog } from "./HelpDialog";
 import { PhotoPanel } from "./PhotoPanel";
@@ -35,6 +37,8 @@ const storage = {
 type Health = { planner: "ok" | "unreachable"; meta_configured: boolean };
 type Analysis = { scenario: RoomScenario; result: ValidationResult };
 type Optimization = { scenario: RoomScenario; result: OptimizationResult };
+// A what-if from the assistant on screen, and the person's own room to go back to.
+type WhatIf = { changes: string[]; room: { scenario: RoomScenario; analysis: Analysis | null; optimization: Optimization | null } };
 
 const primary =
   "rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-60";
@@ -54,6 +58,7 @@ export function Planner() {
   const [compare, setCompare] = useState(false);
   const [inches, setInches] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [whatIf, setWhatIf] = useState<WhatIf | null>(null);
   const abort = useRef<AbortController | null>(null);
   const help = useRef<HTMLDialogElement>(null);
   const previous = useSyncExternalStore(storage.subscribe, () => storage.get(PREVIOUS), () => null);
@@ -70,7 +75,8 @@ export function Planner() {
     if (saved && saved !== JSON.stringify(SAMPLE)) storage.set(PREVIOUS, saved);
     listeners.forEach((l) => l());
   }, []);
-  useEffect(() => storage.set(SAVED, JSON.stringify(scenario)), [scenario]);
+  // A loaded what-if is not saved over the person's room until they keep it.
+  useEffect(() => { if (!whatIf) storage.set(SAVED, JSON.stringify(scenario)); }, [scenario, whatIf]);
   useEffect(() => { // render the print summary only for printing (Ctrl+P or the button)
     const before = () => flushSync(() => setPrinting(true));
     const after = () => setPrinting(false);
@@ -94,7 +100,8 @@ export function Planner() {
   const optStale = optimization !== null && optimization.scenario !== scenario;
   const preview = optStale ? undefined : optimization?.result.alternatives.find((a) => a.id === previewId);
   const previewIndex = preview ? optimization!.result.alternatives.indexOf(preview) + 1 : 0;
-  const ghosts = preview ? scenario.objects.filter((o) => preview.moves.some((m) => m.object_id === o.id)) : [];
+  // outlines of where moved pieces were; a newly placed piece was nowhere before
+  const ghosts = preview ? scenario.objects.filter((o) => !o.to_place && preview.moves.some((m) => m.object_id === o.id)) : [];
 
   const clearResults = () => {
     setAnalysis(null);
@@ -102,6 +109,34 @@ export function Planner() {
     setPreviewId(null);
     setSelectedId(null);
     setError(null);
+    setWhatIf(null);
+  };
+
+  // The what-if room and its planner result go on screen together, so neither reads as stale.
+  const loadWhatIf = (run: AssistantRun) => {
+    setWhatIf((w) => ({ changes: run.changes, room: w?.room ?? { scenario, analysis, optimization } }));
+    setScenario(run.scenario);
+    if (run.tool === "find_layouts") {
+      const result = run.result as OptimizationResult;
+      setOptimization({ scenario: run.scenario, result });
+      setAnalysis({ scenario: run.scenario, result: result.baseline });
+    } else {
+      setAnalysis({ scenario: run.scenario, result: run.result as ValidationResult });
+      setOptimization(null);
+    }
+    setPreviewId(null);
+    setSelectedId(null);
+    setError(null);
+    setView("plan");
+  };
+  const backToRoom = () => {
+    if (!whatIf) return;
+    setScenario(whatIf.room.scenario);
+    setAnalysis(whatIf.room.analysis);
+    setOptimization(whatIf.room.optimization);
+    setPreviewId(null);
+    setSelectedId(null);
+    setWhatIf(null);
   };
 
   const update: Update = (fn) =>
@@ -295,6 +330,16 @@ export function Planner() {
             <PhotoPanel scenario={scenario} update={update} metaConfigured={health?.meta_configured ?? false} />
           </div>
           <div className={view === "plan" ? "flex min-h-0 flex-1 flex-col gap-2" : "hidden"}>
+          {whatIf && (
+            <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <span>Showing a what-if from the assistant: {whatIf.changes.length ? whatIf.changes.join("; ") : "your room as it is"}.
+                Your own room is kept until you choose.</span>
+              <span className="ml-auto flex gap-2">
+                <button className={button} onClick={backToRoom}>Back to my room</button>
+                <button className={button} onClick={() => setWhatIf(null)}>Keep this as my room</button>
+              </span>
+            </div>
+          )}
           {preview && (
             <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
               <span>Previewing option {previewIndex} (read-only). Outlines show where moved pieces were.</span>
@@ -342,6 +387,7 @@ export function Planner() {
 
         <aside className="overflow-y-auto border-slate-200 bg-white lg:border-l" aria-label="Requirements and results">
           <RequestPanel scenario={scenario} update={update} metaConfigured={health?.meta_configured ?? false} />
+          <AssistantPanel scenario={scenario} metaConfigured={health?.meta_configured ?? false} onLoad={loadWhatIf} />
           <RequirementsPanel scenario={scenario} update={update} />
           <Section title="Check this layout">
             {!issues.success && (

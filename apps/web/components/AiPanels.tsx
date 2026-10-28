@@ -97,7 +97,7 @@ export function RequestPanel({ scenario, update, metaConfigured }: {
           className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-2 focus:outline-indigo-500" />
       </label>
       <div className="flex flex-wrap items-center gap-2">
-        <MicButton disabled={!metaConfigured || busy} onTranscript={addTranscript}
+        <MicButton disabled={!metaConfigured || busy} onTranscript={addTranscript} purpose="your request"
           keywords={[...new Set(scenario.objects.map((o) => o.label)), "wheelchair", "inches", "centimetres"]} />
         <button className={button} disabled={!metaConfigured || busy || text.trim().length < 3} onClick={interpret}>
           {busy ? "Asking Muse…" : "Turn into requirements"}

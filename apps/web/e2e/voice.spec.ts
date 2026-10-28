@@ -18,7 +18,7 @@ test("speech is recorded, sent as WAV and added to the text box for review", asy
   const box = page.getByLabel("In your own words");
   await box.fill("Keep my bed where it is.");
 
-  await page.getByRole("button", { name: "Speak" }).click();
+  await page.getByRole("button", { name: "Speak your request" }).click();
   await expect(page.getByRole("button", { name: /Stop recording/ })).toBeVisible();
   await page.waitForTimeout(1500);
   await page.getByRole("button", { name: /Stop recording/ }).click();
@@ -35,5 +35,5 @@ test("speech is recorded, sent as WAV and added to the text box for review", asy
 test("the microphone is off without a Meta key", async ({ page }) => {
   await page.route("**/api/health", (r) => r.fulfill({ json: { status: "ok", planner: "ok", meta_configured: false } }));
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Speak" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Speak your request" })).toBeDisabled();
 });

@@ -145,7 +145,7 @@ export function FurniturePanel({ scenario, selected, update, onSelect, onRotate,
         {scenario.objects.map((o) => (
           <li key={o.id}>
             <button className={`${button} ${o.id === selected?.id ? "border-indigo-500 bg-indigo-50" : ""}`}
-              aria-pressed={o.id === selected?.id} onClick={() => onSelect(o.id)}>{o.label}</button>
+              aria-pressed={o.id === selected?.id} onClick={() => onSelect(o.id)}>{o.label}{o.to_place ? " (not placed yet)" : ""}</button>
           </li>
         ))}
         {!scenario.objects.length && <li className="text-sm text-slate-500">The room is empty. Add furniture above.</li>}

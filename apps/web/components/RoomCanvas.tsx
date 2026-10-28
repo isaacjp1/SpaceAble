@@ -136,7 +136,7 @@ export function RoomCanvas({ scenario, result, stale, selectedId, lockedIds, onS
       })}
 
       {/* furniture */}
-      {scenario.objects.map((o) => {
+      {scenario.objects.filter((o) => !o.to_place).map((o) => { // an unplaced new piece has no spot to draw
         const { w, h } = dims(o);
         const selected = o.id === selectedId;
         const bad = failing.has(o.id);

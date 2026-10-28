@@ -6,8 +6,9 @@ import { MAX_VOICE_SECONDS, recordingToWav } from "@/lib/wav";
 
 /** Tap to start, tap again to stop: no press-and-hold, which many people can't sustain.
  * Muse Voice Transcribe turns the recording into text that is handed back for review. */
-export function MicButton({ keywords, disabled, onTranscript }: {
+export function MicButton({ keywords, disabled, onTranscript, purpose }: {
   keywords: string[]; disabled: boolean; onTranscript: (text: string) => void;
+  purpose: string; // "your request": tells several Speak buttons apart for screen readers
 }) {
   const [state, setState] = useState<"idle" | "recording" | "transcribing">("idle");
   const [seconds, setSeconds] = useState(0);
@@ -73,6 +74,8 @@ export function MicButton({ keywords, disabled, onTranscript }: {
   return (
     <>
       <button type="button" onClick={state === "recording" ? stop : start}
+        aria-label={state === "recording" ? `Stop recording (${seconds} s), ${purpose}`
+          : state === "transcribing" ? `Transcribing ${purpose}` : `Speak ${purpose}`}
         disabled={disabled || state === "transcribing"}
         className={`min-h-11 rounded border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50 ${
           state === "recording" ? "border-red-400 bg-red-50 text-red-800" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}>

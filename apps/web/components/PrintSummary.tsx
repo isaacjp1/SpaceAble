@@ -29,7 +29,7 @@ export function PrintSummary({ scenario, result, baseline, alternative, explanat
         <div className="aspect-[4/3] w-full">
           <RoomCanvas scenario={shownScenario} result={result} stale={false} selectedId={null}
             lockedIds={req.locked_object_ids} readOnly inches={inches}
-            ghosts={alternative ? scenario.objects.filter((o) => alternative.moves.some((m) => m.object_id === o.id)) : []} />
+            ghosts={alternative ? scenario.objects.filter((o) => !o.to_place && alternative.moves.some((m) => m.object_id === o.id)) : []} />
         </div>
       </section>
 
@@ -47,7 +47,7 @@ export function PrintSummary({ scenario, result, baseline, alternative, explanat
             {shownScenario.objects.map((o) => {
               const { w, h } = dims(o);
               const notes = [!o.movable && "fixed", req.locked_object_ids.includes(o.id) && "locked",
-                !o.confirmed && "unconfirmed size", o.label_source === "ai-inferred" && "added from photo"].filter(Boolean);
+                !o.confirmed && "unconfirmed size", o.label_source === "ai-inferred" && "added from photo", o.to_place && "new, not placed yet"].filter(Boolean);
               return (
                 <tr key={o.id}>
                   <td className={cell}>{o.label}</td><td className={cell}>{w} × {h}</td>
@@ -66,8 +66,10 @@ export function PrintSummary({ scenario, result, baseline, alternative, explanat
           <ul className="list-disc pl-5">
             {alternative.moves.map((m) => (
               <li key={m.object_id}>
-                {scenario.objects.find((o) => o.id === m.object_id)?.label}: from ({m.from_x_cm}, {m.from_y_cm}) to ({m.to_x_cm}, {m.to_y_cm})
-                {m.to_rotation_deg !== m.from_rotation_deg ? `, turned to ${m.to_rotation_deg}°` : ""}; centre moves {fmtCm(m.distance_cm, inches)}.
+                {scenario.objects.find((o) => o.id === m.object_id)?.label}: {m.placed
+                  ? <>new, placed at ({m.to_x_cm}, {m.to_y_cm}){m.to_rotation_deg ? `, turned to ${m.to_rotation_deg}°` : ""}.</>
+                  : <>from ({m.from_x_cm}, {m.from_y_cm}) to ({m.to_x_cm}, {m.to_y_cm})
+                    {m.to_rotation_deg !== m.from_rotation_deg ? `, turned to ${m.to_rotation_deg}°` : ""}; centre moves {fmtCm(m.distance_cm, inches)}.</>}
               </li>
             ))}
           </ul>

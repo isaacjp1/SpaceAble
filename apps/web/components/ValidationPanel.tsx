@@ -33,6 +33,7 @@ export function title(c: Check) {
     "door-clearance": "Door clear width",
     "destinations-selected": "Destination selected",
     "turning-space": "Turning space",
+    "unplaced-objects": "Still to place",
   } as Record<string, string>)[c.id] ?? c.id;
 }
 
