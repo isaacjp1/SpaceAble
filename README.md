@@ -111,7 +111,7 @@ and say nothing about real homes.
 ```bash
 cd services/planner && pytest -q && ruff check .        # 72 tests: geometry, routes, optimizer, API, benchmark
 cd services/planner && python -m app.benchmark --repeat --write ../../docs/benchmark.md
-cd apps/web && npm run test && npm run lint && npm run typecheck   # 88 tests, Meta and the planner mocked at the fetch layer
+cd apps/web && npm run test && npm run lint && npm run typecheck   # 82 tests, Meta and the planner mocked at the fetch layer
 cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # 22 browser flows, AI routes mocked
 cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed speech.wav   # REAL, billed Meta calls
 ```
