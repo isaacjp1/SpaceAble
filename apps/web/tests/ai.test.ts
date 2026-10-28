@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  type Evidence, buildEvidence, checkExplanation, checkProposal, constraintSchema, templateExplanation,
+  type Evidence, buildEvidence, checkExplanation, idList, templateExplanation,
 } from "@/lib/ai";
 import {
   type Alternative, type OptimizationResult, RoomScenarioSchema, type ValidationResult,
@@ -11,46 +11,10 @@ import {
 const scenario = RoomScenarioSchema.parse(JSON.parse(readFileSync(
   path.join(import.meta.dirname, "../../../shared/fixtures/canonical-bedroom.json"), "utf8")));
 
-const proposal = (over: object = {}) => ({
-  locked_object_ids: ["bed"], required_destination_ids: ["desk-approach"], route_width_cm: null,
-  turning_diameter_cm: null, optimization_profile: "minimal_changes", clarifying_questions: [],
-  unsupported_requests: [], ...over,
-});
-
-describe("constraint proposal", () => {
-  it("builds enums from the scenario and avoids empty enums", () => {
-    const schema = constraintSchema(scenario);
-    expect(schema.properties.locked_object_ids).toEqual(
-      { type: "array", items: { type: "string", enum: ["bed", "desk", "dresser"] } });
-    const empty = constraintSchema({ ...scenario, destinations: [] });
-    expect(empty.properties.required_destination_ids).toEqual({ type: "array", maxItems: 0 });
-  });
-
-  it("accepts a valid proposal", () => {
-    const r = checkProposal(proposal({ route_width_cm: 90 }), scenario, "I need a 90 cm route to my desk");
-    expect(r).toEqual({ ok: true, proposal: proposal({ route_width_cm: 90 }) });
-  });
-
-  it("rejects ids that do not exist", () => {
-    const r = checkProposal(proposal({ locked_object_ids: ["bed", "piano"] }), scenario, "keep the piano");
-    expect(r).toEqual({ ok: false, error: expect.stringContaining("piano") });
-  });
-
-  it("rejects replies that do not match the schema", () => {
-    expect(checkProposal({ ...proposal(), extra: 1 }, scenario, "x").ok).toBe(false);
-    expect(checkProposal(proposal({ route_width_cm: -5 }), scenario, "-5 cm").ok).toBe(false);
-  });
-
-  it("keeps a missing width missing", () => {
-    const r = checkProposal(proposal(), scenario, "make the route to my desk clearer");
-    expect(r.ok && r.proposal.route_width_cm).toBeNull();
-  });
-
-  it("turns a width the text never stated into a question instead of a value", () => {
-    const r = checkProposal(proposal({ route_width_cm: 100 }), scenario, "about one metre wide please");
-    if (!r.ok) throw new Error(r.error);
-    expect(r.proposal.route_width_cm).toBeNull();
-    expect(r.proposal.clarifying_questions[0]).toContain("100 cm");
+describe("tool schemas", () => {
+  it("avoid empty enums, which are invalid JSON Schema", () => {
+    expect(idList(["bed"])).toEqual({ type: "array", items: { type: "string", enum: ["bed"] } });
+    expect(idList([])).toEqual({ type: "array", maxItems: 0 });
   });
 });
 
@@ -77,6 +41,7 @@ const alt: Alternative = {
   moves: [{ object_id: "desk", from_x_cm: 115, from_y_cm: 35, from_rotation_deg: 0, to_x_cm: 120, to_y_cm: 0,
     to_rotation_deg: 0, distance_cm: 35.4 }],
   cost: { moved_objects: 1, displacement_cm: 35.4, route_length_cm: 100.8, total_score: 112.1 },
+  best_for: ["fewest_changes"],
 };
 const search = { grid_spacing_cm: 20, time_limit_s: 10, elapsed_s: 0.2, combinations_considered: 40,
   candidates_tested: 8, exhaustive: false };
@@ -89,15 +54,15 @@ describe("explanations", () => {
     const text = templateExplanation(evidence);
     expect(text).toContain("move Desk 35.4 cm");
     expect(text).toContain("Verified 80 cm route");
-    expect(text).toContain("option 1 of 1, ranked by fewest changes");
+    expect(text).toContain("Proposed change (the fewest changes option): move Desk 35.4 cm");
     expect(text).toContain("Routes stay verified up to 99 cm wide.");
     expect(text).toContain("Not moved (kept in place or fixed): Bed.");
     expect(checkExplanation(text, evidence)).toEqual({ ok: true });
   });
 
-  it("carries the widest route and ranking so Muse can quote them", () => {
+  it("carries the widest route and the option's goal so Muse can quote them", () => {
     expect(evidence.after?.widest_route_cm).toBe(99);
-    expect(evidence.option).toEqual({ rank: 1, of: 1, moved_objects: 1, route_length_cm: 100.8 });
+    expect(evidence.option).toEqual({ best_for: ["fewest_changes"], moved_objects: 1, route_length_cm: 100.8 });
     expect(evidence.requirements).toMatchObject({ kept_in_place: ["Bed"], fixed_furniture: ["Bed"] });
     expect(checkExplanation("After the move, the route stays verified up to 99 cm wide; you need 80 cm.",
       evidence)).toEqual({ ok: true });
@@ -127,13 +92,5 @@ describe("explanations", () => {
   it("rejects unsupported positive claims", () => {
     expect(checkExplanation("The room is now ADA compliant.", evidence).ok).toBe(false);
     expect(checkExplanation("Your route to the desk is safe.", evidence).ok).toBe(false);
-  });
-});
-
-describe("echoed values", () => {
-  it("treats Muse repeating the current width as 'keep current', not as a suggestion", () => {
-    const r = checkProposal(proposal({ route_width_cm: 80 }), scenario, "make the route to my desk clearer");
-    expect(r.ok && r.proposal.route_width_cm).toBeNull();
-    expect(r.ok && r.proposal.clarifying_questions).toEqual([]);
   });
 });

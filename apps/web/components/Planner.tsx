@@ -12,8 +12,8 @@ import {
 import { ADA_CHANGES, adaReport, adaScenario } from "@/lib/ada";
 import { capturedRoomToScenario } from "@/lib/roomplan";
 import type { AssistantRun } from "@/lib/assistant";
-import { type Explanation, ExplanationView, RequestPanel } from "./AiPanels";
-import { AlternativesPanel } from "./AlternativesPanel";
+import { type Explanation, ExplanationView } from "./AiPanels";
+import { AlternativesPanel, optionName } from "./AlternativesPanel";
 import { AdaPanel } from "./AdaPanel";
 import { AssistantPanel } from "./AssistantPanel";
 import { FurniturePanel, RequirementsPanel, RoomPanel, Section, type Update } from "./Panels";
@@ -41,8 +41,9 @@ const never = () => () => {};
 type Health = { planner: "ok" | "unreachable"; meta_configured: boolean };
 type Analysis = { scenario: RoomScenario; result: ValidationResult };
 type Optimization = { scenario: RoomScenario; result: OptimizationResult };
-// A what-if from the assistant on screen, and the person's own room to go back to.
-type WhatIf = { changes: string[]; room: { scenario: RoomScenario; analysis: Analysis | null; optimization: Optimization | null } };
+// A what-if from the assistant on screen, or a change it made (applied), and the room to go back to.
+type WhatIf = { changes: string[]; applied: boolean;
+  room: { scenario: RoomScenario; analysis: Analysis | null; optimization: Optimization | null } };
 
 const primary =
   "rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-60";
@@ -84,8 +85,8 @@ export function Planner() {
     if (saved && saved !== JSON.stringify(SAMPLE)) storage.set(PREVIOUS, saved);
     listeners.forEach((l) => l());
   }, []);
-  // A loaded what-if is not saved over the person's room until they keep it.
-  useEffect(() => { if (!whatIf) storage.set(SAVED, JSON.stringify(scenario)); }, [scenario, whatIf]);
+  // A loaded what-if is not saved over the person's room until they keep it; an applied change is.
+  useEffect(() => { if (!whatIf || whatIf.applied) storage.set(SAVED, JSON.stringify(scenario)); }, [scenario, whatIf]);
   useEffect(() => { // render the print summary only for printing (Ctrl+P or the button)
     const before = () => flushSync(() => setPrinting(true));
     const after = () => setPrinting(false);
@@ -108,7 +109,7 @@ export function Planner() {
   const issues = RoomScenarioSchema.safeParse(scenario);
   const optStale = optimization !== null && optimization.scenario !== scenario;
   const preview = optStale ? undefined : optimization?.result.alternatives.find((a) => a.id === previewId);
-  const previewIndex = preview ? optimization!.result.alternatives.indexOf(preview) + 1 : 0;
+  const previewName = preview ? optionName(preview, optimization!.result.alternatives.indexOf(preview)).toLowerCase() : "";
   // outlines of where moved pieces were; a newly placed piece was nowhere before
   const ghosts = preview ? scenario.objects.filter((o) => !o.to_place && preview.moves.some((m) => m.object_id === o.id)) : [];
 
@@ -143,8 +144,10 @@ export function Planner() {
   }, [importScan]);
 
   // The what-if room and its planner result go on screen together, so neither reads as stale.
-  const loadWhatIf = (run: Pick<AssistantRun, "tool" | "changes" | "scenario" | "result">) => {
-    setWhatIf((w) => ({ changes: run.changes, room: w?.room ?? { scenario, analysis, optimization } }));
+  // Undo goes back one step for a change; a what-if keeps the room from before any what-if.
+  const loadWhatIf = (run: Pick<AssistantRun, "tool" | "changes" | "scenario" | "result">, applied = false) => {
+    setWhatIf((w) => ({ changes: run.changes, applied,
+      room: applied || !w || w.applied ? { scenario, analysis, optimization } : w.room }));
     setScenario(run.scenario);
     if (run.tool === "find_layouts") {
       const result = run.result as OptimizationResult;
@@ -159,6 +162,10 @@ export function Planner() {
     setError(null);
     setView("plan");
   };
+  // Muse's change becomes the room, unless the room changed while Muse worked or a what-if is on
+  // screen: then it is shown as a what-if, so nothing is overwritten.
+  const applyChange = (run: AssistantRun, base: RoomScenario) =>
+    loadWhatIf(run, scenario === base && (!whatIf || whatIf.applied));
   const backToRoom = () => {
     if (!whatIf) return;
     setScenario(whatIf.room.scenario);
@@ -390,7 +397,16 @@ export function Planner() {
             <PhotoPanel scenario={scenario} update={update} metaConfigured={health?.meta_configured ?? false} />
           </div>
           <div className={view === "plan" ? "flex min-h-0 flex-1 flex-col gap-2" : "hidden"}>
-          {whatIf && (
+          {whatIf?.applied && (
+            <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
+              <span>Muse changed your room: {whatIf.changes.join("; ") || "no visible change"}.</span>
+              <span className="ml-auto flex gap-2">
+                <button className={button} onClick={backToRoom}>Undo</button>
+                <button className={button} onClick={() => setWhatIf(null)}>Dismiss</button>
+              </span>
+            </div>
+          )}
+          {whatIf && !whatIf.applied && (
             <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               <span>Showing a what-if: {whatIf.changes.length ? whatIf.changes.join("; ") : "your room as it is"}.
                 Your own room is kept until you choose.</span>
@@ -402,7 +418,7 @@ export function Planner() {
           )}
           {preview && (
             <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
-              <span>Previewing option {previewIndex} (read-only). Outlines show where moved pieces were.</span>
+              <span>Previewing the {previewName} option (read-only). Outlines show where moved pieces were.</span>
               <span className="ml-auto flex gap-2">
                 <button className={button} aria-pressed={compare} onClick={() => setCompare(!compare)}>
                   {compare ? "Single view" : "Side by side"}
@@ -416,7 +432,7 @@ export function Planner() {
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-2">
               {[
                 { label: "Before", s: scenario, v: optimization!.result.baseline, g: [] },
-                { label: `After: option ${previewIndex}`, s: applyMoves(scenario, preview.moves), v: preview.validation, g: ghosts },
+                { label: `After: ${previewName}`, s: applyMoves(scenario, preview.moves), v: preview.validation, g: ghosts },
               ].map(({ label, s, v, g }) => (
                 <figure key={label} className="flex min-h-[300px] flex-col rounded-lg border border-slate-200 bg-slate-50 p-2">
                   <figcaption className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">
@@ -446,8 +462,8 @@ export function Planner() {
         </main>
 
         <aside className="overflow-y-auto border-slate-200 bg-white lg:border-l" aria-label="Requirements and results">
-          <RequestPanel scenario={scenario} update={update} metaConfigured={health?.meta_configured ?? false} />
-          <AssistantPanel scenario={scenario} metaConfigured={health?.meta_configured ?? false} onLoad={loadWhatIf} />
+          <AssistantPanel scenario={scenario} metaConfigured={health?.meta_configured ?? false}
+            onLoad={loadWhatIf} onChange={applyChange} />
           <RequirementsPanel scenario={scenario} update={update} />
           <Section title="Check this layout">
             {!issues.success && (

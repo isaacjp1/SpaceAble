@@ -1,7 +1,8 @@
-// Muse Spark assistant: Muse picks planner checks, the planner decides, and every number in the
-// answer is checked against the planner's results. Pure helpers shared by the route and the UI.
+// Muse Spark assistant: Muse answers questions with planner checks and carries out commands with
+// change_room; the planner decides, and every number in the answer is checked against the
+// planner's results. Pure helpers shared by the route and the UI.
 import { z } from "zod";
-import { PROFILES, buildEvidence, idList } from "./ai";
+import { buildEvidence, idList } from "./ai";
 import { ADA_CHANGES, ADA_NOTE, ADA_NOT_CHECKED, adaCounts, adaReport, adaScenario } from "./ada";
 import { describeMove } from "./geometry-ui";
 import {
@@ -15,13 +16,13 @@ export const MAX_HISTORY = 4; // earlier turns sent back for follow-up questions
 const NEW_PIECE_APPROACH = { approach_width_cm: 80, approach_depth_cm: 90 }; // as "Add approach zone"
 const SIDES = ["top", "right", "bottom", "left"] as const;
 
-export type ToolName = "check_layout" | "find_layouts" | "ada_reference_check";
+export type ToolName = "check_layout" | "find_layouts" | "change_room" | "ada_reference_check";
 export type RunSummary = Record<string, unknown>;
 export interface AssistantRun {
   id: string;
   tool: ToolName;
   changes: string[]; // readable list, empty = the room as it is
-  scenario: RoomScenario; // the what-if room the planner ran on
+  scenario: RoomScenario; // the room the planner ran on: a what-if, or for change_room the changed room
   result: ValidationResult | OptimizationResult;
   summary: RunSummary; // what Muse saw; sent back with follow-up questions
 }
@@ -51,8 +52,8 @@ export function assistantTools(s: RoomScenario) {
   const where = {
     x_cm: { type: "number" }, y_cm: { type: "number" }, rotation_deg: { type: "integer", enum: [0, 90, 180, 270] },
   };
+  const ada = { use_ada_values: { type: "boolean" } }; // start from the ADA reference copy of the room
   const changes = (placed: boolean) => ({
-    use_ada_values: { type: "boolean" }, // start from the ADA reference copy of the room
     route_width_cm: { type: ["number", "null"] },
     turning_diameter_cm: { type: ["number", "null"] },
     locked_object_ids: orNull(idList(pieces)),
@@ -67,21 +68,27 @@ export function assistantTools(s: RoomScenario) {
       }),
     },
   });
+  const move = pieces.length ? { type: "array", items: object({ object_id: { type: "string", enum: pieces }, ...where }) }
+    : { type: "array", maxItems: 0 };
   const tool = (name: ToolName, description: string, parameters: Record<string, unknown>) =>
     ({ type: "function" as const, function: { name, description, parameters, strict: true } });
   return [
     tool("check_layout", "Check the room as it is, or with the changes given, against the person's " +
-      "requirements. Returns the planner's checks and the widest verified route. New furniture and moves " +
-      "need a position: the top-left corner in cm, rotation clockwise. null keeps the current value.",
-    object({
-      ...changes(true),
-      move: pieces.length ? { type: "array", items: object({ object_id: { type: "string", enum: pieces }, ...where }) }
-        : { type: "array", maxItems: 0 },
-    })),
-    tool("find_layouts", "Search for verified rearrangements of the room with the changes given. The " +
-      "planner places any new furniture itself. Returns up to 3 options with their moves and widest " +
-      "route. null keeps the current value.",
-    object({ ...changes(false), optimization_profile: orNull({ type: "string", enum: [...PROFILES] }) })),
+      "requirements, without changing it. Returns the planner's checks and the widest verified route. New " +
+      "furniture and moves need a position: the top-left corner in cm, rotation clockwise. null keeps the " +
+      "current value.",
+    object({ ...ada, ...changes(true), move })),
+    tool("find_layouts", "Search for verified rearrangements of the room with the changes given, without " +
+      "changing it. The planner places any new furniture itself. Returns the option with the fewest " +
+      "changes and the option with the widest route (one option when one layout is both). null keeps " +
+      "the current value.",
+    object({ ...ada, ...changes(false) })),
+    tool("change_room", "Change the person's room itself, when they tell you to: move or turn pieces, " +
+      "add or remove furniture, keep pieces in place, or set the places to reach, route width and turning " +
+      "circle. The planner checks the changed room, the person sees it at once and can undo it, and later " +
+      "calls start from it. Positions are the top-left corner in cm, rotation clockwise. null keeps the " +
+      "current value.",
+    object({ ...changes(true), move })),
     tool("ada_reference_check", "Compare the room as it is with the 2010 ADA Standards' dimensional rules " +
       "SpaceAble can measure: 36 in routes, 32 in door, 60 in turning circle, 30 × 48 in clear floor " +
       "spaces, and both sides of each bed. A reference check, not a compliance determination. No arguments.",
@@ -110,7 +117,6 @@ const Changes = z.strictObject({
   })).max(3),
   move: z.array(z.strictObject({ object_id: z.string(), x_cm: coord, y_cm: coord, rotation_deg: rotation }))
     .max(10).optional(),
-  optimization_profile: blankIsNull(z.enum(PROFILES).nullable()).optional(),
 });
 
 // ---- the person's own numbers ------------------------------------------------------------
@@ -135,9 +141,10 @@ const isStated = (v: number, said: number[]) => said.some((k) => Math.abs(k - v)
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 const slug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "piece";
 
-/** The what-if room for one tool call, or an error Muse can act on. Sizes and widths must come
- * from the person's words (`said`); positions need not, because the planner checks them. With
- * use_ada_values the changes apply to the ADA reference copy of the room instead. */
+/** The room for one tool call (a what-if, or for change_room the changed room), or an error Muse
+ * can act on. Sizes and widths must come from the person's words (`said`); positions need not,
+ * because the planner checks them. With use_ada_values the changes apply to the ADA reference
+ * copy of the room instead. */
 export function applyChanges(room: RoomScenario, tool: ToolName, raw: unknown, said: number[]):
   { ok: true; scenario: RoomScenario; changes: string[] } | { ok: false; error: string } {
   const parsed = Changes.safeParse(raw, { reportInput: true });
@@ -146,6 +153,10 @@ export function applyChanges(room: RoomScenario, tool: ToolName, raw: unknown, s
     return { ok: false, error: `Invalid arguments (${i.path.join(".")}: ${i.message}; got ${JSON.stringify(i.input)}).` };
   }
   const c = parsed.data;
+  if (tool === "change_room" && c.use_ada_values) {
+    return { ok: false, error: "change_room can't swap the person's room for the ADA copy; use check_layout or find_layouts." };
+  }
+  const placed = tool !== "find_layouts"; // the planner places new furniture only in a search
   const s = c.use_ada_values ? adaScenario(room) : room;
   const ids = new Set(s.objects.filter((o) => !o.to_place).map((o) => o.id));
   const dests = new Set(s.destinations.map((d) => d.id));
@@ -161,8 +172,8 @@ export function applyChanges(room: RoomScenario, tool: ToolName, raw: unknown, s
   if (unstated.length) {
     return { ok: false, error: `Not stated by the person: ${unstated.join(", ")}. Ask them for the measurement; never guess.` };
   }
-  if (tool === "check_layout" && c.add_furniture.some((p) => p.x_cm === undefined || p.y_cm === undefined)) {
-    return { ok: false, error: "New furniture in check_layout needs x_cm and y_cm; use find_layouts to let the planner place it." };
+  if (placed && c.add_furniture.some((p) => p.x_cm === undefined || p.y_cm === undefined)) {
+    return { ok: false, error: `New furniture in ${tool} needs x_cm and y_cm; use find_layouts to let the planner place it.` };
   }
 
   const label = (id: string) => s.objects.find((o) => o.id === id)?.label ?? id;
@@ -198,7 +209,7 @@ export function applyChanges(room: RoomScenario, tool: ToolName, raw: unknown, s
     const place = (i: string) => { const d = next.destinations.find((x) => x.id === i)!; return `${label(d.object_id)} (${d.side})`; };
     changes.push(`Must reach: ${reach.map(place).join(", ") || "nothing"}`);
   }
-  for (const m of tool === "check_layout" ? c.move ?? [] : []) {
+  for (const m of placed ? c.move ?? [] : []) {
     const o = next.objects.find((x) => x.id === m.object_id);
     if (!o) continue; // removed in the same call
     const turned = m.rotation_deg !== o.rotation_deg ? `, turned to ${m.rotation_deg}°` : "";
@@ -208,7 +219,6 @@ export function applyChanges(room: RoomScenario, tool: ToolName, raw: unknown, s
   for (const p of c.add_furniture) {
     let id = `new-${slug(p.label)}`;
     for (let n = 2; next.objects.some((o) => o.id === id); n++) id = `new-${slug(p.label)}-${n}`;
-    const placed = tool === "check_layout";
     next.objects.push({
       id, label: p.label, kind: p.kind, x_cm: p.x_cm ?? 0, y_cm: p.y_cm ?? 0, width_cm: p.width_cm,
       height_cm: p.depth_cm, rotation_deg: p.rotation_deg ?? 0, movable: true,
@@ -221,10 +231,6 @@ export function applyChanges(room: RoomScenario, tool: ToolName, raw: unknown, s
     }
     changes.push(`New ${p.label} ${p.width_cm} × ${p.depth_cm} cm${placed ? ` at (${p.x_cm}, ${p.y_cm})` : ", placed by the planner"}` +
       (p.approach_side ? `, reached from its ${p.approach_side} side` : ""));
-  }
-  if (tool === "find_layouts" && c.optimization_profile && c.optimization_profile !== req.optimization_profile) {
-    req.optimization_profile = c.optimization_profile;
-    changes.push(c.optimization_profile === "max_clearance" ? "Ranked by widest route" : "Ranked by fewest changes");
   }
   const valid = RoomScenarioSchema.safeParse(next);
   return valid.success ? { ok: true, scenario: valid.data, changes }
@@ -242,18 +248,19 @@ export function summarizeRun(tool: ToolName, changes: string[], s: RoomScenario,
       rules: rows.map(({ rule, title, requirement, status, detail }) => ({ rule, title, requirement, status, detail })),
       other_rules_not_checked_list: ADA_NOT_CHECKED.map(([rule, what]) => `${rule}: ${what}`) };
   }
-  if (tool === "check_layout") {
+  if (tool !== "find_layouts") { // check_layout, change_room
     const v = result as ValidationResult;
     const { before } = buildEvidence(s, v);
-    return { tool, changes, status: v.status, widest_route_cm: v.widest_route_cm, checks: before.checks, warnings: before.warnings };
+    return { tool, changes, status: v.status, widest_route_cm: v.widest_route_cm, checks: before.checks, warnings: before.warnings,
+      ...(tool === "change_room" ? { room_now: roomSummary(s) } : {}) }; // later calls start from it
   }
   const o = result as OptimizationResult;
   const piece = (id: string) => s.objects.find((x) => x.id === id) ?? { label: id, width_cm: 1, height_cm: 1 };
   return {
     tool, changes, search: { status: o.status, message: o.message, layouts_checked: o.search.candidates_tested },
     room_before_moves: o.baseline.status,
-    options: o.alternatives.filter((a) => a.moves.length).map((a, i) => ({
-      option: i + 1, moves: a.moves.map((m) => describeMove(m, piece(m.object_id))),
+    options: o.alternatives.filter((a) => a.moves.length).map((a) => ({
+      best_for: a.best_for ?? [], moves: a.moves.map((m) => describeMove(m, piece(m.object_id))),
       widest_route_cm: a.validation.widest_route_cm, route_length_cm: a.cost.route_length_cm,
     })),
   };
@@ -271,7 +278,7 @@ export function roomSummary(s: RoomScenario) {
     places_to_reach: s.destinations.map((d) => ({ id: d.id, object_id: d.object_id, side: d.side,
       required: req.required_destination_ids.includes(d.id) })),
     requirements: { route_width_cm: req.route_width_cm, door_min_clear_width_cm: req.door_min_clear_width_cm,
-      turning_diameter_cm: req.turning_diameter_cm, optimization_profile: req.optimization_profile },
+      turning_diameter_cm: req.turning_diameter_cm },
   };
 }
 
@@ -283,23 +290,35 @@ export function assistantMessages(s: RoomScenario, question: string, history: Tu
       role: "system" as const,
       content:
         "You are SpaceAble's assistant for someone who uses a wheelchair or another mobility device. A " +
-        "geometry planner decides whether a layout works; you never do. For any question about this " +
-        "room's layout, call the tools: check_layout checks the room with the changes you describe, and " +
-        "find_layouts searches for verified rearrangements. Each call starts from the current room. You " +
-        `may call several at once, and you get up to ${MAX_ROUNDS} rounds, so you can follow up on results ` +
-        "(for example, if a check fails, search for a rearrangement before answering). Never make up a " +
+        "geometry planner decides whether a layout works; you never do. First decide whether the person " +
+        "is telling you to change their room (a command: \"move the desk to the left wall\", \"turn the " +
+        "bed\", \"keep the dresser where it is\", \"I need 36 inches\", \"remove the chair\") or asking a " +
+        "question or a what-if (\"would the desk fit there?\", \"what if I moved the bed?\"). Carry out a " +
+        "command with change_room: it changes their room, which they see at once and can undo. Answer a " +
+        "question with check_layout, which checks the room with the changes you describe, or find_layouts, " +
+        "which searches for verified rearrangements; neither changes the room. When a command names an " +
+        "outcome but not where things go (\"make the route to my desk clearer\"), apply what it does state " +
+        "with change_room, then call find_layouts and tell them which option to preview; never invent a " +
+        "place for a piece the person didn't place. Positions are the top-left corner of a piece in cm, x " +
+        "from the left wall and y from the top wall; a piece turned 90 or 270 degrees swaps its width and " +
+        "depth, so against the right wall x is the room width minus that footprint width. If a " +
+        "change_room result fails a check, fix it in the next round when the command allows, or say what " +
+        "fails. Each call starts from the room as it is now, including your earlier change_room changes. " +
+        `You may call several tools at once, and you get up to ${MAX_ROUNDS} rounds, so you can follow up ` +
+        "on results (for example, if a check fails, search for a rearrangement before answering). Never make up a " +
         "measurement: use a route width, turning circle or furniture size only if the person stated " +
         "it, now or earlier; otherwise ask them. The room's requirements already set the route width " +
         "and turning circle: keep them (null) unless the person states new ones. Convert stated inches, " +
         "feet or metres to centimetres yourself (1 inch = 2.54 cm). When something else is ambiguous, " +
         "such as which side of a piece is its front, try the likely options in parallel rather than " +
-        "asking. For new furniture use the person's sizes; in check_layout also pick a " +
+        "asking. For new furniture use the person's sizes; in check_layout and change_room also pick a " +
         "position inside the room, in find_layouts the planner places it. 'earlier' holds this " +
         "conversation's previous questions with the planner results they used; results marked " +
         "older_room were computed before the room changed, so check again before relying on them. " +
         "Answer in 2 to 5 short, plain sentences: no markdown, no lists, furniture by its label and " +
         "never by id. Use only numbers from the tool results, the room or the person's words, exactly " +
-        "as given, in cm. Report what the planner did without guessing why it moved a piece. Say which " +
+        "as given, in cm. Report what the planner did without guessing why it moved a piece. For a " +
+        "command, say what you changed and whether the changed room passes; for a question, say which " +
         "what-if they can load to see it. For questions about the ADA, run ada_reference_check and " +
         "say how many of its rules pass and which fail; call it the ADA reference check, say it is not " +
         "a compliance determination, and that SpaceAble doesn't check the other ADA rules. To look for " +
@@ -317,6 +336,10 @@ export function assistantMessages(s: RoomScenario, question: string, history: Tu
 export const groundingEvidence = (s: RoomScenario, runs: AssistantRun[], history: Turn[]) =>
   ({ room: roomSummary(s), runs: runs.map((r) => r.summary), earlier: history.filter((t) => t.same_room).map((t) => t.results) });
 
+/** The search's widest-route option that moves something (older results: the first that does). */
+export const widestOption = (o: OptimizationResult) =>
+  o.alternatives.find((a) => a.moves.length && (a.best_for?.includes("widest_route") ?? true));
+
 /** Deterministic answer from the planner runs alone, used when Muse's answer can't be shown. */
 export function templateAnswer(runs: AssistantRun[]): string {
   if (!runs.length) return "No planner check was run, so there is nothing verified to report yet.";
@@ -327,13 +350,14 @@ export function templateAnswer(runs: AssistantRun[]): string {
       return `ADA reference check (not a compliance determination): ${adaCounts(rows).passed} of ${rows.length} ` +
         `rules pass. ${rows.map((x) => `${x.rule} ${x.title}: ${x.status.replace("_", " ")}`).join("; ")}.`;
     }
-    if (r.tool === "check_layout") {
+    if (r.tool !== "find_layouts") {
       const v = r.result as ValidationResult;
       const verdict = v.status === "pass" ? "passes" : v.status === "fail" ? "does not pass" : "needs more information";
-      return `Checked ${what}: it ${verdict}${v.widest_route_cm !== null ? `, with routes verified up to ${v.widest_route_cm} cm wide` : ""}.`;
+      return `${r.tool === "change_room" ? `Changed your room (${what})` : `Checked ${what}`}: it ${verdict}` +
+        `${v.widest_route_cm !== null ? `, with routes verified up to ${v.widest_route_cm} cm wide` : ""}.`;
     }
     const o = r.result as OptimizationResult;
-    const best = o.alternatives.find((a) => a.moves.length)?.validation.widest_route_cm;
-    return `Searched ${what}: ${o.message}${best ? ` Option 1 keeps routes verified up to ${best} cm wide.` : ""}`;
+    const best = widestOption(o)?.validation.widest_route_cm;
+    return `Searched ${what}: ${o.message}${best ? ` The widest-route option keeps routes verified up to ${best} cm wide.` : ""}`;
   }).join(" ");
 }

@@ -15,7 +15,7 @@ test("speech is recorded, sent as WAV and added to the text box for review", asy
     await r.fulfill({ json: { model: "muse-voice-transcribe-1.0", transcript: "I need 36 inches to reach my desk." } });
   });
   await page.goto("/");
-  const box = page.getByLabel("In your own words");
+  const box = page.getByLabel("Ask a question, or say what to change");
   await box.fill("Keep my bed where it is.");
 
   await page.getByRole("button", { name: "Speak your request" }).click();
@@ -28,8 +28,8 @@ test("speech is recorded, sent as WAV and added to the text box for review", asy
   // converted in the browser: a RIFF/WAVE file plus the room's furniture names as keywords
   expect(upload!.includes("WAVEfmt ")).toBe(true);
   expect(upload!.toString("latin1")).toContain("Dresser");
-  // nothing went to Muse: the person still decides when to turn it into requirements
-  await expect(page.getByRole("button", { name: "Turn into requirements" })).toBeEnabled();
+  // nothing went to Muse: the person still decides when to send it
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
 });
 
 test("the microphone is off without a Meta key", async ({ page }) => {

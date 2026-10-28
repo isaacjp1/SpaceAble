@@ -15,8 +15,8 @@ problem. A geometry engine, not an AI, decides whether a layout works.
 1. **Checks your room.** Furniture must fit inside the room without overlapping. The door must be wide enough.
    An 80 cm (or your own) route must exist from the door to each place you need to reach, plus an optional
    turning circle. Every result shows measured vs required values and the assumptions behind it.
-2. **Finds rearrangements.** It searches discrete placements cheapest-first, moving at most three pieces.
-   Each option is re-checked by the same validator before you see it. When no option exists, it says why,
+2. **Finds rearrangements.** It searches discrete placements cheapest-first, moving at most three pieces,
+   and offers the option with the fewest changes and the one with the widest route. Each option is re-checked by the same validator before you see it. When no option exists, it says why,
    and never says "impossible" just because it ran out of time. It can also find a place for a piece you
    don't own yet ("would a 100 × 40 cm bookshelf fit?"), moving other furniture only if needed.
 3. **ADA reference check.** It compares the room with five dimensional rules of the 2010 ADA Standards:
@@ -25,21 +25,22 @@ problem. A geometry engine, not an AI, decides whether a layout works.
    your own requirements stay as they are. It lists the ADA areas it doesn't check, notes where it is
    stricter than the ADA, and never says a room is compliant: it is a reference, not a compliance determination.
 4. **Uses Meta's models where they help, and keeps them out of the verdict:**
-   - **Muse Spark 1.3** turns *"I need 36 inches to reach my desk, leave the bed where it is"* into
-     editable constraints you approve (91.44 cm, bed locked). Unknown furniture is rejected, and
-     unstated measurements become questions. It also explains results, but a draft quoting any number
-     the planner didn't produce is replaced by a labelled template.
+   - **Muse Spark 1.3** explains results, but a draft quoting any number the planner didn't produce
+     is replaced by a labelled template.
    - **SAM 3.1** outlines furniture in a room photo (parsed with Meta's official `@meta-sam/parser`). You
      link what it finds to your plan. Photo pixels are never turned into measurements.
    - **Muse Voice Transcribe** lets you say your request instead of typing it, for anyone who finds
      typing hard. Tap **Speak**, then tap again to stop (no press-and-hold). The words land in the text
      box for you to check and edit, and nothing goes to Muse Spark until you ask.
-   - **Ask about your room** is a Muse Spark assistant that answers questions such as *"Keep the dresser
-     where it is too. I need 36 inches."* It runs the planner itself, using `check_layout` and
-     `find_layouts` as tools, over up to three rounds, and a progress bar shows each step as it happens.
-     Widths and furniture sizes must come from your own words; otherwise it asks. Every number in the
-     answer is checked against the planner. Each check becomes a what-if you can load, preview and undo,
-     and follow-up questions build on earlier results. Asked about the ADA, it runs the ADA reference
+   - **Ask or tell Muse** is one box for questions and commands. Muse Spark decides which it is.
+     A question (*"Would a 100 by 40 cm bookshelf fit?"*) runs the planner through `check_layout` and
+     `find_layouts`, and each check becomes a what-if you can load, preview and leave. A command
+     (*"Move the desk against the right wall"*, *"Keep the bed where it is, I need 36 inches"*) goes
+     through `change_room`: it moves, turns, adds or removes furniture and sets your requirements,
+     the planner checks the result, and you see it at once with **Undo**. It works over up to three
+     rounds, with a progress bar for each step. Widths and furniture sizes must come from your own
+     words; otherwise it asks. Every number in the answer is checked against the planner, and
+     follow-up questions build on earlier results. Asked about the ADA, it runs the ADA reference
      check, and can search for rearrangements using the ADA dimensions.
 
 | Muse proposes, you approve | Before / after, both verified | SAM outlines, you confirm |

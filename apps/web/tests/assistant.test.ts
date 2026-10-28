@@ -11,6 +11,8 @@ const scenario = RoomScenarioSchema.parse(JSON.parse(readFileSync(
 const keep = { route_width_cm: null, turning_diameter_cm: null, locked_object_ids: null,
   required_destination_ids: null, remove_object_ids: [], add_furniture: [] };
 const said = (...texts: string[]) => statedNumbers(texts);
+const validation = { status: "pass", checks: [], routes: [], turning_zones: [], reachable_area: [], assumptions: [],
+  warnings: [], grid_cm: 5, elapsed_ms: 1, widest_route_cm: 104 } satisfies ValidationResult;
 
 describe("the person's numbers", () => {
   it("include centimetre equivalents of inches, feet and metres", () => {
@@ -71,6 +73,24 @@ describe("applying a tool call", () => {
     expect(moved.ok && moved.scenario.objects.find((o) => o.id === "dresser")).toMatchObject({ x_cm: 90, y_cm: 300 });
   });
 
+  it("changes the room on a command: moves, locks and places pieces where Muse says", () => {
+    const chair = { label: "Chair", kind: "chair", width_cm: 50, depth_cm: 50, approach_side: null, x_cm: 0, y_cm: 0 };
+    const r = applyChanges(scenario, "change_room", { ...keep, locked_object_ids: ["bed", "dresser"], add_furniture: [chair],
+      move: [{ object_id: "desk", x_cm: 380, y_cm: 0, rotation_deg: 90 }] }, said("a 50 cm chair"));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.scenario.objects.find((o) => o.id === "desk")).toMatchObject({ x_cm: 380, y_cm: 0, rotation_deg: 90 });
+    expect(r.scenario.objects.at(-1)).toMatchObject({ id: "new-chair", x_cm: 0, y_cm: 0, to_place: false });
+    expect(r.changes).toEqual(["Kept in place: Bed, Dresser", "Desk moved to (380, 0), turned to 90°", "New Chair 50 × 50 cm at (0, 0)"]);
+    const summary = summarizeRun("change_room", r.changes, r.scenario, validation);
+    expect((summary.room_now as { furniture: object[] }).furniture).toContainEqual(
+      expect.objectContaining({ id: "desk", x_cm: 380, y_cm: 0 })); // later calls start here
+  });
+
+  it("never swaps the person's room for the ADA copy", () => {
+    const r = applyChanges(scenario, "change_room", { ...keep, use_ada_values: true }, []);
+    expect(r).toEqual({ ok: false, error: expect.stringContaining("ADA copy") });
+  });
+
   it("adds new furniture for the planner to place, reachable if asked", () => {
     const desk = { label: "Standing desk", kind: "desk", width_cm: 120, depth_cm: 60, approach_side: "bottom" };
     const r = applyChanges(scenario, "find_layouts", { ...keep, add_furniture: [desk] }, said("a 120 by 60 cm desk"));
@@ -85,30 +105,32 @@ describe("applying a tool call", () => {
 
 describe("tools and summaries", () => {
   it("offers strict tools limited to the room's real ids", () => {
-    const [check, find] = assistantTools(scenario);
-    expect(check.function.strict && find.function.strict).toBe(true);
+    const [check, find, change] = assistantTools(scenario);
+    expect(check.function.strict && find.function.strict && change.function.strict).toBe(true);
     expect(JSON.stringify(check.function.parameters)).toContain('"enum":["bed","desk","dresser"]');
-    expect(Object.keys((find.function.parameters as { properties: object }).properties)).toContain("optimization_profile");
+    const keys = (tool: typeof check) => Object.keys((tool.function.parameters as { properties: object }).properties);
+    expect(change.function.name).toBe("change_room");
+    expect(keys(change)).toContain("move");
+    expect(keys(change)).not.toContain("use_ada_values");
+    expect(keys(find)).not.toContain("optimization_profile");
   });
 
   it("describes placed new pieces and falls back to a planner-only answer", () => {
-    const validation = { status: "pass", checks: [], routes: [], turning_zones: [], reachable_area: [], assumptions: [],
-      warnings: [], grid_cm: 5, elapsed_ms: 1, widest_route_cm: 104 } satisfies ValidationResult;
     const result: OptimizationResult = {
       status: "solutions_found", message: "Found 1 verified alternative with a place for the new Shelf.", baseline: validation,
       search: { grid_spacing_cm: 20, time_limit_s: 5, elapsed_s: 0.2, combinations_considered: 9, candidates_tested: 4, exhaustive: false },
       warnings: [], alternatives: [{ id: "alternative-1", layout: { object_positions: [] }, validation,
         cost: { moved_objects: 0, displacement_cm: 0, route_length_cm: 120, total_score: 6 },
-        moves: [{ object_id: "new-shelf", from_x_cm: 0, from_y_cm: 200, from_rotation_deg: 90, to_x_cm: 0, to_y_cm: 200,
+        best_for: ["fewest_changes", "widest_route"], moves: [{ object_id: "new-shelf", from_x_cm: 0, from_y_cm: 200, from_rotation_deg: 90, to_x_cm: 0, to_y_cm: 200,
           to_rotation_deg: 90, distance_cm: 0, placed: true }] }],
     };
     const s = { ...scenario, objects: [...scenario.objects, { ...scenario.objects[2], id: "new-shelf", label: "Shelf", to_place: true }] };
     const summary = summarizeRun("find_layouts", ["New Shelf 100 × 40 cm, placed by the planner"], s, result);
-    expect(summary.options).toEqual([{ option: 1, moves: ["Shelf (new): placed at (0, 200), turned to 90°"],
+    expect(summary.options).toEqual([{ best_for: ["fewest_changes", "widest_route"], moves: ["Shelf (new): placed at (0, 200), turned to 90°"],
       widest_route_cm: 104, route_length_cm: 120 }]);
     const run = { id: "c1", tool: "find_layouts", changes: ["New Shelf 100 × 40 cm, placed by the planner"],
       scenario: s, result, summary } satisfies AssistantRun;
     expect(templateAnswer([run])).toBe("Searched New Shelf 100 × 40 cm, placed by the planner: Found 1 verified " +
-      "alternative with a place for the new Shelf. Option 1 keeps routes verified up to 104 cm wide.");
+      "alternative with a place for the new Shelf. The widest-route option keeps routes verified up to 104 cm wide.");
   });
 });

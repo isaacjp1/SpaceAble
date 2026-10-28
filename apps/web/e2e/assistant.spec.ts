@@ -14,7 +14,8 @@ test("an answer comes with what-ifs that can be loaded, previewed and undone, th
   expect(res.ok()).toBe(true);
   const result = await res.json();
   expect(result.status).toBe("solutions_found");
-  const summary = { tool: "find_layouts", changes, options: [{ option: 1, widest_route_cm: result.alternatives[0].validation.widest_route_cm }] };
+  const summary = { tool: "find_layouts", changes, options: [{ best_for: result.alternatives[0].best_for,
+    widest_route_cm: result.alternatives[0].validation.widest_route_cm }] };
   const events = [
     { type: "step", round: 1, kind: "think" },
     { type: "tools", round: 1, calls: [{ id: "call_0", tool: "find_layouts", changes, error: null }] },
@@ -29,13 +30,13 @@ test("an answer comes with what-ifs that can be loaded, previewed and undone, th
     sent.push(r.request().postDataJSON());
     const reply = sent.length === 1 ? events
       : [{ type: "step", round: 1, kind: "think" }, { type: "answer", source: "muse", model: "muse-spark-1.3",
-        text: "Option 1 is the one shown first.", note: "No planner check was run for this answer." }];
+        text: "The fewest changes option is shown first.", note: "No planner check was run for this answer." }];
     await r.fulfill({ contentType: "application/x-ndjson", body: reply.map((e) => JSON.stringify(e)).join("\n") + "\n" });
   });
 
   await page.goto("/");
-  await page.getByLabel("Ask a question").fill("Keep the dresser too. Would a 100 by 40 cm shelf fit?");
-  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await page.getByLabel("Ask a question, or say what to change").fill("Keep the dresser too. Would a 100 by 40 cm shelf fit?");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByText("Answered by Meta muse-spark-1.3 · every number checked against the planner")).toBeVisible();
   await expect(page.getByText(/the shelf fits once the desk moves/)).toBeVisible();
   await page.getByText("How this was checked (3 steps)").click();
@@ -46,7 +47,7 @@ test("an answer comes with what-ifs that can be loaded, previewed and undone, th
   await page.getByRole("button", { name: "Load this what-if" }).click();
   await expect(page.getByText(/Showing a what-if: Kept in place: Bed, Dresser/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Shelf (not placed yet)" })).toBeVisible();
-  const first = page.getByRole("listitem").filter({ hasText: "Option 1" });
+  const first = page.getByRole("listitem").filter({ hasText: "Fewest changes" });
   await expect(first.getByText(/Shelf \(new\): placed at/)).toBeVisible();
   await first.getByRole("button", { name: "Preview" }).click();
   await expect(page.getByRole("button", { name: /^Shelf, \d+ by \d+ cm at x/ })).toBeVisible(); // drawn where placed
@@ -57,9 +58,9 @@ test("an answer comes with what-ifs that can be loaded, previewed and undone, th
   await expect(page.getByRole("button", { name: /Shelf/ })).toHaveCount(0);
 
   // a follow-up carries the earlier results, marked as computed on this same room
-  await page.getByLabel("Ask a follow-up").fill("Which option is first?");
-  await page.getByRole("button", { name: "Ask", exact: true }).click();
-  await expect(page.getByText("Option 1 is the one shown first.")).toBeVisible();
+  await page.getByLabel("Ask or tell Muse something else").fill("Which option is first?");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText("The fewest changes option is shown first.")).toBeVisible();
   await expect(page.getByText("No planner check was run for this answer.")).toBeVisible();
   expect(sent[1].history).toEqual([expect.objectContaining({ same_room: true, results: [summary] })]);
 });
@@ -67,6 +68,61 @@ test("an answer comes with what-ifs that can be loaded, previewed and undone, th
 test("the assistant is off without a Meta key", async ({ page }) => {
   await page.route("**/api/health", (r) => r.fulfill({ json: { status: "ok", planner: "ok", meta_configured: false } }));
   await page.goto("/");
-  await page.getByLabel("Ask a question").fill("Does my room work?");
-  await expect(page.getByRole("button", { name: "Ask", exact: true })).toBeDisabled();
+  await page.getByLabel("Ask a question, or say what to change").fill("Does my room work?");
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await expect(page.getByText(/edit the room and your clearance needs by hand/)).toBeVisible();
+});
+
+// A command: Muse's change_room run carries the changed room, checked by the real planner.
+async function mockCommand(page: import("@playwright/test").Page, request: import("@playwright/test").APIRequestContext,
+  gate: Promise<void> = Promise.resolve()) {
+  const moved = structuredClone(fixture);
+  moved.objects.find((o) => o.id === "dresser")!.y_cm = 300;
+  const res = await request.post("/api/planner/analyze", { data: { scenario: moved } });
+  expect(res.ok()).toBe(true);
+  const run = { id: "call_0", tool: "change_room", changes: ["Dresser moved to (90, 300)"], scenario: moved,
+    result: await res.json(), summary: {} };
+  const events = [
+    { type: "step", round: 1, kind: "think" },
+    { type: "tools", round: 1, calls: [{ id: "call_0", tool: "change_room", changes: run.changes, error: null }] },
+    { type: "run", run },
+    { type: "step", round: 2, kind: "answer" },
+    { type: "answer", source: "muse", model: "muse-spark-1.3", note: null, text: "I moved the Dresser to (90, 300)." },
+  ];
+  await page.route("**/api/health", (r) => r.fulfill({ json: { status: "ok", planner: "ok", meta_configured: true } }));
+  await page.route("**/api/ai/assistant", async (r) => {
+    await gate;
+    await r.fulfill({ contentType: "application/x-ndjson", body: events.map((e) => JSON.stringify(e)).join("\n") + "\n" });
+  });
+}
+
+test("a command changes the room at once, and Undo puts it back", async ({ page, request }) => {
+  await mockCommand(page, request);
+  await page.goto("/");
+  await page.getByLabel("Ask a question, or say what to change").fill("Move the dresser down to the bottom wall.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+
+  await expect(page.getByText("Muse changed your room: Dresser moved to (90, 300).")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Dresser, 100 by 50 cm at x 90, y 300/ })).toBeVisible();
+  await expect(page.getByText("Changed your room: Dresser moved to (90, 300)", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load this what-if" })).toHaveCount(0); // it is already the room
+
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByText(/Muse changed your room/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Dresser, 100 by 50 cm at x 90, y 165/ })).toBeVisible();
+});
+
+test("a command never overwrites edits made while Muse was working", async ({ page, request }) => {
+  let open = () => {};
+  await mockCommand(page, request, new Promise((resolve) => { open = resolve; }));
+  await page.goto("/");
+  await page.getByLabel("Ask a question, or say what to change").fill("Move the dresser down to the bottom wall.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page.getByRole("button", { name: /^Desk, / }).press("ArrowRight"); // edit while waiting
+  open();
+
+  await expect(page.getByText("Showing a what-if: Dresser moved to (90, 300).")).toBeVisible();
+  await page.getByRole("button", { name: "Back to my room" }).click();
+  await expect(page.getByRole("button", { name: /^Dresser, 100 by 50 cm at x 90, y 165/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Desk, .* at x 120,/ })).toBeVisible(); // the edit is kept
 });

@@ -6,37 +6,6 @@ async function withMeta(page: Page, configured = true) {
   await page.route("**/api/health", (r) => r.fulfill({ json: { status: "ok", planner: "ok", meta_configured: configured } }));
 }
 
-test("without a key the AI controls explain why they are off", async ({ page }) => {
-  await withMeta(page, false);
-  await page.goto("/");
-  await expect(page.getByRole("button", { name: "Turn into requirements" })).toBeDisabled();
-  await expect(page.getByText(/set requirements by hand/)).toBeVisible();
-});
-
-test("a Muse proposal is reviewed, edited and applied by the user", async ({ page }) => {
-  await withMeta(page);
-  await page.route("**/api/ai/parse-request", (r) => r.fulfill({ json: { model: "muse-spark-1.3", proposal: {
-    locked_object_ids: ["bed"], required_destination_ids: ["desk-approach"], route_width_cm: 91.44,
-    turning_diameter_cm: null, optimization_profile: "minimal_changes", clarifying_questions: [],
-    unsupported_requests: ["check if doorway meets ADA"],
-  } } }));
-  await page.goto("/");
-  await page.getByLabel("In your own words").fill("I need 36 inches to reach my desk; leave the bed alone.");
-  await page.getByRole("button", { name: "Turn into requirements" }).click();
-
-  const review = page.getByRole("group", { name: /Proposed by Meta muse-spark-1.3/ });
-  await expect(review).toBeVisible();
-  await expect(review.getByText("check if doorway meets ADA")).toBeVisible();
-  await expect(review.getByLabel("Route width")).toHaveValue("91.44");
-  await expect(review.getByLabel("Optimizer preference")).toHaveValue("minimal_changes");
-  // nothing is applied until the user approves
-  await expect(page.getByLabel("Route width")).toHaveCount(2);
-
-  await review.getByRole("button", { name: "Apply to my requirements" }).click();
-  await expect(review).toHaveCount(0);
-  await expect(page.getByLabel("Route width")).toHaveValue("91.44");
-});
-
 test("explanations are labelled by source and show why a draft was discarded", async ({ page }) => {
   await withMeta(page);
   await page.route("**/api/ai/explain", (r) => r.fulfill({ json: {

@@ -45,10 +45,11 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Performance + impossible-case tests (matrix 5, 14–17)
 - [x] UI: Optimize + time limit, alternative cards, preview with before-outlines and arrows, use (Playwright)
 - [x] Most open space (`max_clearance`): widest verified route on every option, ranked widest first, manual control (pytest + Playwright)
+- [x] Optimize returns one option per goal, fewest changes and widest route (`best_for`), instead of a profile to pick (pytest + Playwright)
 
 ## Meta AI features
 
-- [x] Muse text → constraints (strict schema, Zod re-validation, review panel); live-verified
+- [x] Muse text → constraints (strict schema, Zod re-validation, review panel); live-verified. Since folded into the assistant
 - [x] Muse explanation from validator evidence + grounding check + deterministic fallback; live-verified
 - [x] Explain covers the widest verified route, option rank and ranking, search outcome and warnings; live-verified 2026-10-27
 - [x] SAM segmentation via `@meta-sam/parser`; live-verified
@@ -58,6 +59,8 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Voice input (Muse Voice Transcribe): browser WAV, `/api/ai/transcribe`, tap-to-talk mic button (vitest + Playwright with a fake microphone); live-verified 2026-10-27
 - [x] Muse Spark assistant: `analyze`/`optimize` as tools, up to 3 chained rounds, no invented measurements, grounded answer, load a what-if (vitest + Playwright); live-verified 2026-10-27
 - [x] Assistant extras: streamed progress bar, follow-up questions with earlier results, hypothetical new furniture placed by the planner (`to_place`, pytest)
+- [x] One box for questions and commands: `change_room` moves, turns, adds and removes furniture and sets requirements on the room itself, with Undo; offered as a what-if if the room changed meanwhile (vitest + Playwright, mocked AI)
+- [ ] Live-verify `change_room` with a real key
 - [x] ADA reference check: 5 dimensional rules of the 2010 ADA Standards on a copy of the room, not-checked list, "Show on the plan", assistant tool + `use_ada_values` (vitest + Playwright against the real planner); live-verified 2026-10-27
 
 ## Product UX and evaluation

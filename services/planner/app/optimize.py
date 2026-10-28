@@ -44,10 +44,9 @@ ROUTE_LENGTH_WEIGHT = 0.05  # per cm of required route, applied after validation
 MAX_CANDIDATES_PER_OBJECT = 120
 MAX_MOVED_OBJECTS = 3
 DIVERSITY_CM = 60.0  # alternatives must differ by more than this for some object
-# Limit: max_clearance ranks the first CLEARANCE_POOL verified layouts found in cost order, so
-# it is the widest of the cheapest layouts, not the widest possible one. Raise it, or search
-# by width, if that matters.
-CLEARANCE_POOL = 12
+# Limit: the widest-route option is the widest of the first POOL verified layouts found in cost
+# order, not the widest possible one. Raise it, or search by width, if that matters.
+POOL = 12
 
 
 @dataclass(frozen=True)
@@ -194,7 +193,6 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
     required = set(req.required_destination_ids)
     baseline = analyze(scenario)
     warnings: list[str] = []
-    by_width = req.optimization_profile == "max_clearance"
     new = [o for o in scenario.objects if o.to_place]  # every option must place these
     placing = f" with a place for the new {', '.join(o.label for o in new)}" if new else ""
     tested = considered = 0
@@ -214,11 +212,9 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
         baseline.widest_route_cm = widest_route(scenario)
         current = Alternative(id="current", layout=Layout(), moves=[], validation=baseline,
                               cost=Cost(moved_objects=0, displacement_cm=0, route_length_cm=length,
-                                        total_score=round(ROUTE_LENGTH_WEIGHT * length, 1)))
-        if not by_width:
-            return done("solutions_found", "The current layout already passes; nothing needs to "
-                        "move.", [current])
-        # max_clearance keeps searching, but only for layouts with a wider route than this one.
+                                        total_score=round(ROUTE_LENGTH_WEIGHT * length, 1)),
+                              best_for=["fewest_changes", "widest_route"])
+        # It is the fewest-changes option; the search looks only for a wider route than this.
     blocking = [c for c in baseline.checks if c.required and c.status in ("needs_input", "unknown")
                 # the baseline leaves new pieces out, and with them their destinations
                 and not (new and c.id == "destinations-selected")]
@@ -284,8 +280,7 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
     first = (0,) * len(lists)
     heap, seen = [(0.0, first)], {first}
     timed_out = False
-    pool = CLEARANCE_POOL if by_width else options.max_alternatives
-    while heap and len(found) < pool:
+    while heap and len(found) < POOL:
         if perf_counter() - t0 > options.time_limit_s:
             timed_out = True
             break
@@ -329,35 +324,35 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
                       route_length_cm=length, total_score=round(score, 1))))
 
     exhaustive = not heap and not timed_out and not truncated and len(movers) <= MAX_MOVED_OBJECTS
-    pooled = len(found)
-    if by_width:
-        found.sort(key=lambda a: (-a.validation.widest_route_cm, a.cost.total_score))
-        kept: list[Alternative] = []
-        for a in found:  # skip options that move the same pieces or more for no extra width
-            pieces = {m.object_id for m in a.moves}
-            if not any({m.object_id for m in k.moves} <= pieces for k in kept):
-                kept.append(a)
-        found = kept[:options.max_alternatives]
-    else:
-        found.sort(key=lambda a: a.cost.total_score)
-    for n, alt in enumerate(found, 1):
-        alt.id = f"alternative-{n}"
-    if found:
-        if timed_out:
-            warnings.append("The search stopped at the time limit; other alternatives may exist.")
-        s = "s" if len(found) > 1 else ""
-        message = f"Found {len(found)} verified alternative{s}{placing}."
-        if by_width:
-            wider = (f" with a route wider than the current {baseline.widest_route_cm:g} cm"
-                     if current else placing)
-            message = (f"Found {pooled} verified layout{'s' if pooled > 1 else ''}{wider}, "
-                       "searching from the fewest changes. Showing the widest, skipping any "
-                       "that move more furniture for no extra width.")
-        return done("solutions_found", message, found)
-    if current:
+    # One option per goal: the fewest changes (the current layout when it passes) and the widest
+    # route, the cheaper one on a tie. One layout can be both.
+    fewest = current or min(found, key=lambda a: a.cost.total_score, default=None)
+    widest = max(found, key=lambda a: (a.validation.widest_route_cm, -a.cost.total_score),
+                 default=fewest)
+    if timed_out and fewest:
+        warnings.append("The search stopped at the time limit; other alternatives may exist.")
+    if current and widest is current:
         return done("solutions_found", "The current layout already passes. No layout with a "
                     f"route wider than its {baseline.widest_route_cm:g} cm was found among "
                     "those tried.", [current])
+    if fewest:
+        fewest.best_for = ["fewest_changes"] + (["widest_route"] if widest is fewest else [])
+        widest.best_for = fewest.best_for if widest is fewest else ["widest_route"]
+        picked = [fewest] if widest is fewest else [fewest, widest]
+        for n, alt in enumerate((a for a in picked if a is not current), 1):
+            alt.id = f"alternative-{n}"
+        n = len(found)
+        if current:
+            message = (f"The current layout already passes; nothing needs to move. Found {n} "
+                       f"verified layout{'s' if n > 1 else ''} with a route wider than its "
+                       f"{baseline.widest_route_cm:g} cm; showing the widest.")
+        else:
+            message = f"Found {n} verified alternative{'s' if n > 1 else ''}{placing}."
+            if n > 1:
+                message += (" The one with the fewest changes also has the widest route."
+                            if widest is fewest else " Showing the one with the fewest changes "
+                            "and the one with the widest route.")
+        return done("solutions_found", message, picked)
     if exhaustive:
         return done("discretized_search_infeasible", f"No verified layout{placing} among the "
                     f"{options.grid_spacing_cm:g} cm grid placements tried. A valid arrangement "

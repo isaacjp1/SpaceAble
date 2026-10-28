@@ -67,33 +67,33 @@ test("optimize returns verified alternatives that can be previewed and applied",
   // the optimizer's baseline is the same validator's verdict on the current layout
   await expect(page.getByText("Does not pass the configured checks")).toBeVisible();
 
-  const first = page.getByRole("listitem").filter({ hasText: "Option 1" });
+  const first = page.getByRole("listitem").filter({ hasText: "Fewest changes" });
   await expect(first.getByText(/moved \d+(\.\d)? cm/)).toBeVisible();
   await first.getByRole("button", { name: "Preview" }).click();
-  await expect(page.getByText("Previewing option 1 (read-only)")).toBeVisible();
+  await expect(page.getByText("Previewing the fewest changes option (read-only)")).toBeVisible();
   await expect(page.locator("text=(before)").first()).toBeVisible(); // ghost of the old spot
   await expect(page.locator('line[marker-end^="url(#"]').first()).toBeVisible();
   await expect(page.getByText("Passes the configured geometric checks")).toBeVisible();
 
   await page.getByRole("button", { name: "Use this layout" }).first().click();
-  await expect(page.getByText("Previewing option 1")).toHaveCount(0);
+  await expect(page.getByText(/^Previewing/)).toHaveCount(0);
   // recompute from scratch on the applied layout
   await page.getByRole("button", { name: "Analyze" }).click();
   await expect(page.getByText("Passes the configured geometric checks")).toBeVisible();
   await expect(page.getByText("The layout changed since this analysis")).toHaveCount(0);
 });
 
-test("most open space ranks verified alternatives by widest route", async ({ page }) => {
+test("optimize offers the fewest changes and the widest route", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("Planner: online")).toBeVisible();
+  await expect(page.getByLabel("When optimizing, prefer")).toHaveCount(0); // no choice to make
 
-  await page.getByLabel("When optimizing, prefer").selectOption("max_clearance");
   await page.getByRole("button", { name: "Optimize" }).click();
   await expect(page.getByText("Verified alternatives", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Showing the widest/)).toBeVisible();
-  const widths = (await page.getByText(/^Widest route [\d.]+ cm/).allTextContents())
-    .map((t) => Number(t.match(/[\d.]+/)![0]));
-  expect(widths.length).toBeGreaterThan(0);
-  expect(widths).toEqual([...widths].sort((a, b) => b - a));
-  expect(widths[0]).toBeGreaterThan(80); // the sample needs 80 cm
+  const fewest = page.getByRole("listitem").filter({ hasText: /^Fewest changes ·/ });
+  const widest = page.getByRole("listitem").filter({ hasText: /^Widest route ·/ });
+  const width = async (item: typeof fewest) =>
+    Number((await item.getByText(/^Widest route [\d.]+ cm/).textContent())!.match(/[\d.]+/)![0]);
+  expect(await width(widest)).toBeGreaterThan(await width(fewest));
+  expect(await width(fewest)).toBeGreaterThanOrEqual(80); // the sample needs 80 cm
 });
