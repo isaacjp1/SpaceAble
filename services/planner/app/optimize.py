@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from itertools import combinations
 from time import perf_counter
 
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, box
+from shapely.ops import unary_union
 
 from . import routing
 from .analyze import analyze
@@ -45,8 +46,11 @@ MAX_CANDIDATES_PER_OBJECT = 120
 MAX_MOVED_OBJECTS = 3
 DIVERSITY_CM = 60.0  # alternatives must differ by more than this for some object
 # Limit: the widest-route option is the widest of the first POOL verified layouts found in cost
-# order, not the widest possible one. Raise it, or search by width, if that matters.
+# order, not the widest possible one. Raise it, or search by width, if that matters. The search
+# stops sooner once a layout reaches the widest route any layout could have, or, when the current
+# layout passes, after POOL layouts in a row that looked wider turned out not to be.
 POOL = 12
+FEWEST_POOL = 3  # the fewest-changes option is the cheapest of at least this many verified layouts
 
 
 @dataclass(frozen=True)
@@ -128,12 +132,24 @@ def _compatible(chosen: list[Cand]) -> bool:
     return True
 
 
-def _connected(chosen, scenario, fixed_rects, fixed_targets, start, r) -> bool:
-    """Necessary condition only: the entry's free-space component touches every target."""
-    free = routing.free_space(scenario.room, fixed_rects + [c.rect for c in chosen], r)
+def _touches_all(free, start, targets) -> bool:
     comp = routing.component_at(free, start)
-    targets = fixed_targets + [z for c in chosen for z in c.approach]
     return comp is not None and all(comp.intersection(t).area > EPS for t in targets)
+
+
+def _reaches(room, door, rects, targets, w: float) -> bool:
+    """Necessary condition only: at route width w, the entry's free-space component touches every
+    target. Fewer rects, fewer targets or a narrower w can only keep it true."""
+    r = w / 2
+    return _touches_all(routing.free_space(room, rects, r), routing.entry_point(door, room, r),
+                        targets)
+
+
+def _reach_limit(room, door, rects, targets, base: float) -> float:
+    """Widest width, in 1 cm steps above base, at which `_reaches` holds (it must hold at base)."""
+    steps = _last_true(lambda k: _reaches(room, door, rects, targets, base + k),
+                       max(0, int(min(room.width_cm, room.height_cm) - base)))
+    return base + steps
 
 
 def _route_length(v: ValidationResult, required: set[str]) -> float:
@@ -168,20 +184,13 @@ def widest_route(scenario: RoomScenario, grid_cm: float = 5.0) -> float | None:
     targets = [approach_rect(d, by_id[d.object_id]) for d in scenario.destinations
                if d.id in req.required_destination_ids]
 
-    def connected(w: float) -> bool:
-        r = w / 2
-        comp = routing.component_at(routing.free_space(room, rects, r),
-                                    routing.entry_point(door, room, r))
-        return comp is not None and all(comp.intersection(t).area > EPS for t in targets)
-
     def passes(w: float) -> bool:
         wider = scenario.model_copy(update={
             "requirements": req.model_copy(update={"route_width_cm": w})})
         return analyze(wider, grid_cm).status == "pass"
 
     base = req.route_width_cm
-    steps = _last_true(lambda k: connected(base + k),
-                       max(0, int(min(room.width_cm, room.height_cm) - base)))
+    steps = round(_reach_limit(room, door, rects, targets, base) - base)
     if steps and not passes(base + steps):
         steps = _last_true(lambda k: passes(base + k), steps - 1)
     return round(base + steps, 2)
@@ -274,16 +283,45 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
         return done("discretized_search_infeasible", f"No spot for the new {', '.join(nowhere)} "
                     f"among the {options.grid_spacing_cm:g} cm grid placements tried: everywhere "
                     "it overlaps fixed furniture, a required approach zone or the doorway.")
+
+    def reaches(chosen: list[Cand], w: float) -> bool:
+        return _reaches(scenario.room, door, fixed_rects + [c.rect for c in chosen],
+                        fixed_targets + [z for c in chosen for z in c.approach], w)
+
+    # No layout can be wider than the best spot for the most constraining mover: every layout
+    # puts each mover in one of its spots, and every other piece only narrows the route.
+    ceiling = math.inf
+    for cands in lists:
+        top = 0.0
+        for c in cands:
+            if reaches([c], max(top + 1, 2 * r)):
+                top = _reach_limit(scenario.room, door, fixed_rects + [c.rect],
+                                   fixed_targets + list(c.approach), req.route_width_cm)
+        ceiling = min(ceiling, top)
     is_new = [o.to_place for o in movers]  # a new piece's index 0 is a placement, not 'stay'
 
     found: list[Alternative] = []
     first = (0,) * len(lists)
     heap, seen = [(0.0, first)], {first}
     timed_out = False
-    while heap and len(found) < POOL:
+    floor = baseline.widest_route_cm if current else None  # an option must be wider than this
+    best = floor  # the widest so far
+    misses = 0  # layouts analysed since the last one found
+    # Every combination is checked at one width (with a passing current layout, only a wider one
+    # is of use; that implies the required width), so grow each footprint for it once. Merging
+    # pieces grown one by one gives the same polygon as free_space growing their union.
+    gw = (2 * r if floor is None else floor + 1) / 2
+    W, H = scenario.room.width_cm, scenario.room.height_cm
+    inner = box(gw, gw, W - gw, H - gw) if min(W, H) > 2 * gw else Polygon()
+    fixed_grown = routing.grow(unary_union(fixed_rects), gw)
+    grown = [[routing.grow(c.rect, gw) for c in cands] for cands in lists]
+    entry = routing.entry_point(door, scenario.room, gw)
+    while heap and len(found) < POOL and (floor is None or misses < POOL):
         if perf_counter() - t0 > options.time_limit_s:
             timed_out = True
             break
+        if best is not None and best >= ceiling and (current or len(found) >= FEWEST_POOL):
+            break  # nothing can be wider, and the fewest-changes option is settled
         _, idx = heapq.heappop(heap)
         moved = sum(i > 0 for i, n in zip(idx, is_new, strict=True) if not n)
         if moved > MAX_MOVED_OBJECTS:
@@ -297,14 +335,18 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
             continue  # the unmoved layout is the baseline, analysed above
         considered += 1
         chosen = [lists[k][i] for k, i in enumerate(idx)]
-        if not _compatible(chosen) or not _connected(chosen, scenario, fixed_rects,
-                                                     fixed_targets, start, r):
+        if not _compatible(chosen):
+            continue
+        free = inner.difference(
+            unary_union([fixed_grown] + [grown[k][i] for k, i in enumerate(idx)]))
+        if not _touches_all(free, entry, fixed_targets + [z for c in chosen for z in c.approach]):
             continue
         changed = [c for k, c in enumerate(chosen) if idx[k] > 0 or is_new[k]]
         positions = [ObjectPosition(object_id=c.obj.id, x_cm=c.obj.x_cm, y_cm=c.obj.y_cm,
                                     rotation_deg=c.obj.rotation_deg) for c in changed]
         layout = Layout(object_positions=positions)
         tested += 1
+        misses += 1
         moved_scenario = apply_layout(scenario, layout)
         v = analyze(moved_scenario)
         if v.status != "pass":
@@ -312,11 +354,16 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
         moves = [_move(c, by_id[c.obj.id]) for c in changed]
         if any(_near_duplicate(moves, alt.moves) for alt in found):
             continue
-        v.widest_route_cm = widest_route(moved_scenario)
-        if current and v.widest_route_cm <= baseline.widest_route_cm:
-            continue
+        # Measure the widest route only if it could be the widest so far; the rest are measured
+        # at the end if chosen as the fewest-changes option.
+        if best is None or floor is not None or reaches(chosen, best):
+            v.widest_route_cm = widest_route(moved_scenario)
+            if floor is not None and v.widest_route_cm <= floor:
+                continue
+            best = max(best or 0.0, v.widest_route_cm)
         length = _route_length(v, required)
         score = sum(c.cost for c in chosen) + ROUTE_LENGTH_WEIGHT * length
+        misses = 0
         found.append(Alternative(
             id="", layout=layout, moves=moves, validation=v,
             cost=Cost(moved_objects=sum(not m.placed for m in moves),
@@ -327,8 +374,10 @@ def optimize(scenario: RoomScenario, options: OptimizeOptions) -> OptimizationRe
     # One option per goal: the fewest changes (the current layout when it passes) and the widest
     # route, the cheaper one on a tie. One layout can be both.
     fewest = current or min(found, key=lambda a: a.cost.total_score, default=None)
-    widest = max(found, key=lambda a: (a.validation.widest_route_cm, -a.cost.total_score),
+    widest = max(found, key=lambda a: (a.validation.widest_route_cm or 0, -a.cost.total_score),
                  default=fewest)
+    if fewest and fewest.validation.widest_route_cm is None:
+        fewest.validation.widest_route_cm = widest_route(apply_layout(scenario, fewest.layout))
     if timed_out and fewest:
         warnings.append("The search stopped at the time limit; other alternatives may exist.")
     if current and widest is current:

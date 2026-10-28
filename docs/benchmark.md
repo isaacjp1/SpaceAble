@@ -7,26 +7,26 @@ Analysis grid 5 cm; candidate grid 20 cm; optimizer time limit 10 s per room.
 
 | fixture | before | search_status | after | alternatives | moved_objects | route_length_cm | solver_time_s | validated | exhaustive | hit_time_limit | grid_misses | verification |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| canonical-bedroom | fail | solutions_found | pass | 2 | 1 | 100.8 | 0.688 | 64 | False | False | 0 | OK |
-| feasible-bedroom | pass | solutions_found | pass | 2 | 0 | 118.4 | 2.671 | 230 | False | False | 0 | OK |
+| canonical-bedroom | fail | solutions_found | pass | 2 | 1 | 100.8 | 0.564 | 64 | False | False | 0 | OK |
+| feasible-bedroom | pass | solutions_found | pass | 2 | 0 | 118.4 | 0.563 | 60 | False | False | 0 | OK |
 | locked-impossible | fail | discretized_search_infeasible | - | 0 | - | - | 0.003 | 0 | True | False | 0 | OK |
-| narrow-corridor | fail | discretized_search_infeasible | - | 0 | - | - | 0.018 | 0 | False | False | 0 | OK |
-| wide-corridor | pass | solutions_found | pass | 1 | 0 | 390.0 | 1.55 | 97 | False | False | 0 | OK |
-| impossible-turn | fail | discretized_search_infeasible | - | 0 | - | - | 0.008 | 0 | False | False | 0 | OK |
+| narrow-corridor | fail | discretized_search_infeasible | - | 0 | - | - | 0.025 | 0 | False | False | 0 | OK |
+| wide-corridor | pass | solutions_found | pass | 1 | 0 | 390.0 | 0.062 | 0 | False | False | 0 | OK |
+| impossible-turn | fail | discretized_search_infeasible | - | 0 | - | - | 0.005 | 0 | False | False | 0 | OK |
 | unconfirmed-input | fail | needs_input | - | 0 | - | - | 0.002 | 0 | False | False | 0 | OK |
-| procedural-1 | fail | solutions_found | pass | 1 | 1 | 95.0 | 0.459 | 102 | False | False | 0 | OK |
-| procedural-2 | fail | solutions_found | pass | 2 | 3 | 95.5 | 10.0 | 488 | False | True | 0 | OK |
-| procedural-3 | fail | solutions_found | pass | 2 | 2 | 14.1 | 0.626 | 140 | False | False | 0 | OK |
-| procedural-4 | fail | solutions_found | pass | 2 | 2 | 145.0 | 10.0 | 173 | False | True | 0 | OK |
-| procedural-5 | pass | solutions_found | pass | 1 | 0 | 110.1 | 10.019 | 534 | False | True | 0 | OK |
-| procedural-6 | fail | discretized_search_infeasible | - | 0 | - | - | 0.001 | 0 | False | False | 0 | OK |
-| procedural-7 | fail | discretized_search_infeasible | - | 0 | - | - | 0.002 | 0 | False | False | 0 | OK |
-| procedural-8 | fail | solutions_found | pass | 2 | 1 | 140.0 | 0.83 | 85 | False | False | 0 | OK |
-| procedural-9 | pass | solutions_found | pass | 2 | 0 | 356.5 | 6.364 | 141 | False | False | 0 | OK |
-| procedural-10 | fail | solutions_found | pass | 2 | 1 | 90.0 | 0.525 | 51 | False | False | 0 | OK |
-| procedural-11 | fail | solutions_found | pass | 2 | 1 | 89.3 | 0.939 | 66 | False | False | 0 | OK |
-| procedural-12 | fail | solutions_found | pass | 2 | 1 | 180.7 | 5.703 | 758 | False | False | 0 | OK |
-| procedural-13 | pass | solutions_found | pass | 1 | 0 | 77.6 | 10.004 | 933 | False | True | 0 | OK |
+| procedural-1 | fail | solutions_found | pass | 1 | 1 | 95.0 | 0.435 | 102 | False | False | 0 | OK |
+| procedural-2 | fail | solutions_found | pass | 2 | 3 | 95.5 | 10.0 | 635 | False | True | 0 | OK |
+| procedural-3 | fail | solutions_found | pass | 2 | 2 | 14.1 | 0.672 | 140 | False | False | 0 | OK |
+| procedural-4 | fail | solutions_found | pass | 2 | 2 | 145.0 | 8.493 | 193 | False | False | 0 | OK |
+| procedural-5 | pass | solutions_found | pass | 1 | 0 | 110.1 | 0.549 | 12 | False | False | 0 | OK |
+| procedural-6 | fail | discretized_search_infeasible | - | 0 | - | - | 0.003 | 0 | False | False | 0 | OK |
+| procedural-7 | fail | discretized_search_infeasible | - | 0 | - | - | 0.001 | 0 | False | False | 0 | OK |
+| procedural-8 | fail | solutions_found | pass | 2 | 1 | 140.0 | 0.376 | 6 | False | False | 0 | OK |
+| procedural-9 | pass | solutions_found | pass | 2 | 0 | 356.5 | 4.186 | 86 | False | False | 0 | OK |
+| procedural-10 | fail | solutions_found | pass | 2 | 1 | 90.0 | 0.449 | 51 | False | False | 0 | OK |
+| procedural-11 | fail | solutions_found | pass | 2 | 1 | 89.3 | 0.78 | 66 | False | False | 0 | OK |
+| procedural-12 | fail | solutions_found | pass | 2 | 1 | 180.7 | 4.894 | 758 | False | False | 0 | OK |
+| procedural-13 | pass | solutions_found | pass | 1 | 0 | 77.6 | 0.148 | 0 | False | False | 0 | OK |
 | procedural-14 | fail | discretized_search_infeasible | - | 0 | - | - | 0.001 | 0 | False | False | 0 | OK |
 
 - Rooms: 21 (7 named fixtures, 14 procedural seeds).
