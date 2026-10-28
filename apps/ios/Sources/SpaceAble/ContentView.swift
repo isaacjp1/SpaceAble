@@ -29,8 +29,10 @@ struct ContentView: View {
                 } else if let plan, let draft {
                     ResultView(plan: plan, draft: draft, scanAgain: { self.plan = nil; self.draft = nil },
                                changeWho: { choosing = true })
-                } else if draft != nil {
-                    CheckView(draft: Binding($draft)!, back: { draft = nil }) { Task { await run() } }
+                } else if let d = draft {
+                    // falls back to the last draft while "Back" removes this screen, instead of unwrapping nil
+                    CheckView(draft: Binding(get: { draft ?? d }, set: { draft = $0 }), back: { draft = nil },
+                              changeWho: { choosing = true }) { Task { await run() } }
                 } else {
                     StartView(who: who, changeWho: { choosing = true }, scan: { scanning = true },
                               sample: { Task { await load(nil) } })
@@ -138,6 +140,7 @@ struct StartView: View {
 struct CheckView: View {
     @Binding var draft: Draft
     let back: () -> Void
+    let changeWho: () -> Void
     let looksRight: () -> Void
     @State private var tapped: Piece?
     @State private var door: Door?
@@ -173,6 +176,7 @@ struct CheckView: View {
                     Text("Looks right").font(.title3).frame(maxWidth: .infinity, minHeight: 50)
                 }
                 .buttonStyle(.borderedProminent)
+                Button("Change how I get around", action: changeWho).font(.footnote)
             }
             .padding()
         }
