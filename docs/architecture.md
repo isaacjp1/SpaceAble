@@ -1,7 +1,10 @@
 # SpaceAble architecture
 
 ```text
-browser (Next.js page, SVG floor-plan editor)
+iPhone app (apps/ios: WKWebView + RoomPlan scanner)
+   │  raw CapturedRoom JSON → window.spaceableImportScan (stays on the phone)
+   ▼
+browser (Next.js page, SVG floor-plan editor; lib/roomplan.ts turns a scan into a draft RoomScenario)
    │  RoomScenario JSON (cm), photo, free text
    ▼
 Next.js API routes  (server-only MODEL_API_KEY)
@@ -193,6 +196,50 @@ Live-verified 2026-10-27 on the sample bedroom (real Muse and planner):
   against a wall), and then checked a what-if with the dresser moved. That what-if clears the desk's
   30 × 48 in space, with a verified 93.4 cm route.
 
+## Room scan
+
+The iPhone app (`apps/ios`) shows the site in a `WKWebView` and adds a native RoomPlan scanner. The page's
+**Scan room** button (shown only inside the app) posts to the `scanRoom` message handler. The app accepts it
+only from the main frame of the site's own host, and only on devices with LiDAR. When the person chooses
+**Use this scan**, the app encodes `CapturedRoom` with `JSONEncoder` and passes it as an argument to
+`window.spaceableImportScan` (`callAsyncJavaScript`, never string interpolation). The page converts it and
+replies with `null` or a message for an alert. **Load JSON** accepts the same raw scan.
+
+`capturedRoomToScenario` in `lib/roomplan.ts` turns the scan into a draft:
+- **Floor plane.** ARKit world space is metres, y up. Each element's centre is the transform's
+  translation `(x, z)` and its direction is its local x axis projected on the floor. Seen from above, +z
+  points down the screen, so plan `(x, y)` = world `(x, z)` with no mirroring.
+- **Squaring up.** The dominant wall direction, `atan2(Σ L·sin 4φ, Σ L·cos 4φ) / 4` weighted by wall
+  length, becomes the x axis. The bounding box of the wall ends gives the room, rounded **down** to whole cm.
+- **Rectangles only.** A curved wall, a wall more than 5° off square, or a wall more than 10 cm from every
+  side of the box (an L-shaped room's inner walls) is rejected with a message. A box drawn around an
+  L-shaped room includes floor that isn't part of it, so a route could "pass" through a wall.
+- **Doors** and doorless openings go on the nearest side, centred where scanned and clamped to the wall;
+  windows are ignored. At most 8. RoomPlan measures the door **frame**, which is wider than the gap a
+  wheelchair actually passes through, so the width is optimistic. Doors therefore stay unconfirmed, and
+  the review banner asks for a tape measure.
+- **Furniture** boxes are "sized to the object's extremities", so sizes round **up**. Rotation snaps to
+  the nearest quarter turn, with a warning past 10°. Pieces are clamped inside the walls (scan noise
+  pushes them a few cm in), with a warning past 15 cm. Pieces larger than the room are left out, and
+  beyond 40 the smallest are. Overlaps stay; the editor flags them.
+- **Categories.** RoomPlan's 16 object categories map to bed, table (RoomPlan has no desk), chair and
+  sofa, or `other` for storage and televisions. Bathtubs, toilets, sinks, kitchen appliances, washer/dryers,
+  fireplaces and stairs become fixed obstacles (`movable: false`).
+- **Everything is unconfirmed** (`confirmed: false`, `label_source: "ai-inferred"`), so **Analyze** returns
+  `needs_input` until the person checks each item. Room width and depth can't be marked unconfirmed,
+  so the review banner asks for them to be checked too. There are no destinations yet. The person's route,
+  door and turning widths and the optimization profile carry over; locks, required destinations and the
+  start door reset, because the old ids are gone.
+
+**Privacy.** The raw scan stays in the browser, as photos do on their way to SAM: it never reaches an API
+route and is never logged. Only the converted `RoomScenario` reaches the planner, as with any room.
+
+**Unconfirmed encoding.** Until a real scan has been read, `readScan` holds every assumption about the JSON
+form of `CapturedRoom`: a column-major 4×4 `transform` (16 numbers, or 4 columns of 4) with the translation at
+12–14, `dimensions` as `[x, y, z]` in metres with a wall's length first, and `category` as `{"bed": {}}`.
+Anything else is refused as an unknown format rather than guessed. Debug builds of the app have a
+**Share raw scan** button to take a real scan off the phone.
+
 ## Security and deployment
 
 - The planner is server-to-server only. With `PLANNER_SHARED_SECRET` set (required in production), every
@@ -326,6 +373,7 @@ Live-verified 2026-10-26 through the app routes (`npm run dev`, real key):
 ## Deliberate simplifications
 
 - Axis-aligned rectangular room and furniture only.
+- Room scans: rectangular rooms only; doors snap to the nearest wall and furniture to quarter turns.
 - Door swing is not modelled.
 - The approach zone is centred on its side (not slid along it).
 - A grid miss in a passage narrower than about one grid cell above the threshold can

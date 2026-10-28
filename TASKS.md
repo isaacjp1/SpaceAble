@@ -66,7 +66,10 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Keyboard controls, Help & limits dialog, disclaimer, inches display, cancel, mobile layout (plan first, no horizontal scroll at 390 px)
 - [x] Save/load JSON (with selected alternative + explanation), print summary, browser autosave with restore (Playwright)
 - [x] Synthetic benchmark (`docs/benchmark.md`): 21 rooms, 0 verification mismatches, reproducible; found + fixed an optimizer gap
-- [x] Playwright flows (20 tests incl. building a room from scratch; AI routes mocked)
+- [x] Playwright flows (22 tests incl. building a room from scratch; AI routes mocked)
+- [x] Room scan → draft plan: RoomPlan converter (rectangles only, conservative rounding, everything unconfirmed), Scan room bridge and review banner, Load JSON accepts raw scans (vitest + Playwright with a stubbed app bridge)
+- [x] iPhone app (`apps/ios`, xtool): site in a web view, RoomPlan scanner, origin-checked bridge; compiles with `xtool dev build` (debug and release)
+- [ ] Run the app on a LiDAR iPhone: scan a real room and confirm the scan's JSON encoding
 
 - [x] Demo script (`docs/demo-script.md`)
 
