@@ -17,7 +17,8 @@ problem. A geometry engine, not an AI, decides whether a layout works.
    turning circle. Every result shows measured vs required values and the assumptions behind it.
 2. **Finds rearrangements.** It searches discrete placements cheapest-first, moving at most three pieces.
    Each option is re-checked by the same validator before you see it. When no option exists, it says why,
-   and never says "impossible" just because it ran out of time.
+   and never says "impossible" just because it ran out of time. It can also find a place for a piece you
+   don't own yet ("would a 100 × 40 cm bookshelf fit?"), moving other furniture only if needed.
 3. **Uses Meta's models where they help, and keeps them out of the verdict:**
    - **Muse Spark 1.3** turns *"I need 36 inches to reach my desk, leave the bed where it is"* into
      editable constraints you approve (91.44 cm, bed locked). Unknown furniture is rejected, and
@@ -28,6 +29,12 @@ problem. A geometry engine, not an AI, decides whether a layout works.
    - **Muse Voice Transcribe** lets you say your request instead of typing it, for anyone who finds
      typing hard. Tap **Speak**, then tap again to stop (no press-and-hold). The words land in the text
      box for you to check and edit, and nothing goes to Muse Spark until you ask.
+   - **Ask about your room** is a Muse Spark assistant that answers questions such as *"Keep the dresser
+     where it is too. I need 36 inches."* It runs the planner itself, using `check_layout` and
+     `find_layouts` as tools, over up to three rounds, and a progress bar shows each step as it happens.
+     Widths and furniture sizes must come from your own words; otherwise it asks. Every number in the
+     answer is checked against the planner. Each check becomes a what-if you can load, preview and undo,
+     and follow-up questions build on earlier results.
 
 | Muse proposes, you approve | Before / after, both verified | SAM outlines, you confirm |
 | --- | --- | --- |
@@ -71,10 +78,10 @@ and say nothing about real homes.
 ## Tests
 
 ```bash
-cd services/planner && pytest -q && ruff check .        # 65 tests: geometry, routes, optimizer, API, benchmark
+cd services/planner && pytest -q && ruff check .        # 71 tests: geometry, routes, optimizer, API, benchmark
 cd services/planner && python -m app.benchmark --repeat --write ../../docs/benchmark.md
-cd apps/web && npm run test && npm run lint && npm run typecheck   # 52 tests, Meta mocked at the fetch layer
-cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # 17 browser flows, AI routes mocked
+cd apps/web && npm run test && npm run lint && npm run typecheck   # 67 tests, Meta and the planner mocked at the fetch layer
+cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # 19 browser flows, AI routes mocked
 cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed speech.wav   # REAL, billed Meta calls
 ```
 

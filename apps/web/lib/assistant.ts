@@ -38,7 +38,10 @@ export type AssistantEvent =
 
 // ---- tools -------------------------------------------------------------------------------
 
-const nullable = (schema: object) => ({ anyOf: [schema, { type: "null" }] });
+// `type: [t, "null"]`, not anyOf: live, Muse sent strings for anyOf arrays and Meta's strict mode
+// didn't stop it.
+const orNull = ({ type, enum: values, ...rest }: { type: string; enum?: readonly unknown[]; [k: string]: unknown }) =>
+  ({ type: [type, "null"], ...(values ? { enum: [...values, null] } : {}), ...rest });
 const object = (properties: Record<string, object>): Record<string, unknown> =>
   ({ type: "object", properties, required: Object.keys(properties), additionalProperties: false });
 
@@ -50,14 +53,14 @@ export function assistantTools(s: RoomScenario) {
   const changes = (placed: boolean) => ({
     route_width_cm: { type: ["number", "null"] },
     turning_diameter_cm: { type: ["number", "null"] },
-    locked_object_ids: nullable(idList(pieces)),
-    required_destination_ids: nullable(idList(s.destinations.map((d) => d.id))),
+    locked_object_ids: orNull(idList(pieces)),
+    required_destination_ids: orNull(idList(s.destinations.map((d) => d.id))),
     remove_object_ids: idList(pieces),
     add_furniture: {
       type: "array", items: object({
         label: { type: "string" }, kind: { type: "string", enum: [...KINDS] },
         width_cm: { type: "number" }, depth_cm: { type: "number" },
-        approach_side: nullable({ type: "string", enum: [...SIDES] }),
+        approach_side: orNull({ type: "string", enum: [...SIDES] }),
         ...(placed ? where : {}),
       }),
     },
@@ -76,13 +79,17 @@ export function assistantTools(s: RoomScenario) {
     tool("find_layouts", "Search for verified rearrangements of the room with the changes given. The " +
       "planner places any new furniture itself. Returns up to 3 options with their moves and widest " +
       "route. null keeps the current value.",
-    object({ ...changes(false), optimization_profile: nullable({ type: "string", enum: [...PROFILES] }) })),
+    object({ ...changes(false), optimization_profile: orNull({ type: "string", enum: [...PROFILES] }) })),
   ];
 }
 
 const cm = z.number().positive().max(3000);
 const coord = z.number().min(0).max(3000);
 const rotation = z.literal([0, 90, 180, 270]);
+// For an optional choice, "" or the string "null" means "keep current", like null (live, Muse sent
+// "null" as a string).
+const blankIsNull = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((v) => (v === "" || v === "null" ? null : v), schema);
 const Changes = z.strictObject({
   route_width_cm: cm.nullable(),
   turning_diameter_cm: cm.nullable(),
@@ -91,12 +98,12 @@ const Changes = z.strictObject({
   remove_object_ids: z.array(z.string()).max(40),
   add_furniture: z.array(z.strictObject({
     label: z.string().trim().min(1).max(40), kind: z.enum(KINDS), width_cm: cm, depth_cm: cm,
-    approach_side: z.enum(SIDES).nullable(),
+    approach_side: blankIsNull(z.enum(SIDES).nullable()),
     x_cm: coord.optional(), y_cm: coord.optional(), rotation_deg: rotation.optional(),
   })).max(3),
   move: z.array(z.strictObject({ object_id: z.string(), x_cm: coord, y_cm: coord, rotation_deg: rotation }))
     .max(10).optional(),
-  optimization_profile: z.enum(PROFILES).nullable().optional(),
+  optimization_profile: blankIsNull(z.enum(PROFILES).nullable()).optional(),
 });
 
 // ---- the person's own numbers ------------------------------------------------------------
@@ -118,10 +125,10 @@ const slug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-").
  * from the person's words (`said`); positions need not, because the planner checks them. */
 export function applyChanges(s: RoomScenario, tool: ToolName, raw: unknown, said: number[]):
   { ok: true; scenario: RoomScenario; changes: string[] } | { ok: false; error: string } {
-  const parsed = Changes.safeParse(raw);
+  const parsed = Changes.safeParse(raw, { reportInput: true });
   if (!parsed.success) {
     const i = parsed.error.issues[0];
-    return { ok: false, error: `Invalid arguments (${i.path.join(".")}: ${i.message}).` };
+    return { ok: false, error: `Invalid arguments (${i.path.join(".")}: ${i.message}; got ${JSON.stringify(i.input)}).` };
   }
   const c = parsed.data;
   const ids = new Set(s.objects.filter((o) => !o.to_place).map((o) => o.id));
@@ -258,15 +265,20 @@ export function assistantMessages(s: RoomScenario, question: string, history: Tu
         "room's layout, call the tools: check_layout checks the room with the changes you describe, and " +
         "find_layouts searches for verified rearrangements. Each call starts from the current room. You " +
         `may call several at once, and you get up to ${MAX_ROUNDS} rounds, so you can follow up on results ` +
-        "(for example, try another change if the first one fails). Never make up a measurement: use a " +
-        "route width, turning circle or furniture size only if the person stated it, now or earlier; " +
-        "otherwise ask them. For new furniture use the person's sizes; in check_layout also pick a " +
+        "(for example, if a check fails, search for a rearrangement before answering). Never make up a " +
+        "measurement: use a route width, turning circle or furniture size only if the person stated " +
+        "it, now or earlier; otherwise ask them. The room's requirements already set the route width " +
+        "and turning circle: keep them (null) unless the person states new ones. Convert stated inches, " +
+        "feet or metres to centimetres yourself (1 inch = 2.54 cm). When something else is ambiguous, " +
+        "such as which side of a piece is its front, try the likely options in parallel rather than " +
+        "asking. For new furniture use the person's sizes; in check_layout also pick a " +
         "position inside the room, in find_layouts the planner places it. 'earlier' holds this " +
         "conversation's previous questions with the planner results they used; results marked " +
         "older_room were computed before the room changed, so check again before relying on them. " +
         "Answer in 2 to 5 short, plain sentences: no markdown, no lists, furniture by its label and " +
         "never by id. Use only numbers from the tool results, the room or the person's words, exactly " +
-        "as given, in cm. Say which what-if they can load to see it. Decline anything the planner can't " +
+        "as given, in cm. Report what the planner did without guessing why it moved a piece. Say which " +
+        "what-if they can load to see it. Decline anything the planner can't " +
         "assess (building codes, ADA, medical or equipment advice) in one sentence. Never claim " +
         "compliance, certification, safety or guaranteed access.",
     },

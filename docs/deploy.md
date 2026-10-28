@@ -41,8 +41,10 @@ limit (default 10 s, max 30 s) of a single core.
 | `MODEL_API_KEY` | Meta Model API key, server-side only. Never prefix it with `NEXT_PUBLIC_`. |
 | `META_BASE_URL`, `META_MUSE_MODEL`, `META_SAM_MODEL` | Optional overrides (defaults in `.env.example`). |
 
-Slow routes (optimize, explain, segment, parse-request, transcribe) export `maxDuration = 60`. Confirm your plan allows
-60 s functions; otherwise optimize (up to its time limit) and explain (11–17 s live) can be cut off.
+Slow routes (optimize, explain, segment, parse-request, transcribe) export `maxDuration = 60`, and the assistant
+exports `maxDuration = 120`: it makes several Muse calls and planner searches, and stops itself at 100 s. Confirm
+your plan allows 120 s functions; otherwise optimize (up to its time limit), explain (11–17 s live) and the
+assistant (2–11 s live, longer for chained rounds) can be cut off.
 Vercel also caps request bodies at about 4.5 MB. That's below the server's 5 MB photo limit, but the
 browser re-encodes photos to at most 1600 px JPEG (a few hundred KB) before upload, so real uploads stay
 well under it.

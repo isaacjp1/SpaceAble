@@ -15,6 +15,7 @@ export function HelpDialog({ ref }: { ref: React.Ref<HTMLDialogElement> }) {
           <li>Press <strong>Analyze</strong>. Every check is computed by the planner from your measurements, never by the AI.</li>
           <li>Press <strong>Optimize</strong> to search for up to three verified rearrangements. Preview one, compare it side by side, then <strong>Use this layout</strong>.</li>
           <li>Press <strong>Explain</strong> for a plain-language summary that may only quote the planner’s numbers.</li>
+          <li>Or <strong>Ask about your room</strong>, for example “Would a 100 by 40 cm bookshelf fit?”. Meta Muse Spark runs planner checks to answer, and each check becomes a what-if you can load and undo with <strong>Back to my room</strong>. It asks for any measurement you didn’t give.</li>
           <li>Optionally open <strong>Photo</strong> to have SAM 3.1 outline furniture in a photo, and link what it finds to your plan.</li>
           <li><strong>Save JSON</strong> or <strong>Print summary</strong> to keep the result. Your latest room is also kept in this browser.</li>
         </ol>
