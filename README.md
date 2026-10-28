@@ -19,8 +19,8 @@ problem. A geometry engine, not an AI, decides whether a layout works.
    Each option is re-checked by the same validator before you see it. When no option exists, it says why,
    and never says "impossible" just because it ran out of time. It can also find a place for a piece you
    don't own yet ("would a 100 × 40 cm bookshelf fit?"), moving other furniture only if needed.
-3. **ADA reference check.** It compares the room with the 5 rules of the 2010 ADA Standards that a 2D plan can
-   measure: 36 in routes (403.5.1), a 32 in door (404.2.3), a 60 in turning circle (304.3) and 30 × 48 in clear
+3. **ADA reference check.** It compares the room with five dimensional rules of the 2010 ADA Standards:
+   36 in routes (403.5.1), a 32 in door (404.2.3), a 60 in turning circle (304.3) and 30 × 48 in clear
    floor spaces (305.3), including both sides of a bed (806.2.3). The planner checks a copy of your room, so
    your own requirements stay as they are. It lists the ADA areas it doesn't check, notes where it is
    stricter than the ADA, and never says a room is compliant: it is a reference, not a compliance determination.
