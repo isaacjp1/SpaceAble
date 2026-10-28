@@ -58,6 +58,7 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Voice input (Muse Voice Transcribe): browser WAV, `/api/ai/transcribe`, tap-to-talk mic button (vitest + Playwright with a fake microphone); live-verified 2026-10-27
 - [x] Muse Spark assistant: `analyze`/`optimize` as tools, up to 3 chained rounds, no invented measurements, grounded answer, load a what-if (vitest + Playwright); live-verified 2026-10-27
 - [x] Assistant extras: streamed progress bar, follow-up questions with earlier results, hypothetical new furniture placed by the planner (`to_place`, pytest)
+- [x] ADA reference check: 5 dimensional rules of the 2010 ADA Standards on a copy of the room, not-checked list, "Show on the plan", assistant tool + `use_ada_values` (vitest + Playwright against the real planner); live-verified 2026-10-27
 
 ## Product UX and evaluation
 
@@ -65,7 +66,7 @@ Boxes are ticked only after the relevant test or run has actually passed.
 - [x] Keyboard controls, Help & limits dialog, disclaimer, inches display, cancel, mobile layout (plan first, no horizontal scroll at 390 px)
 - [x] Save/load JSON (with selected alternative + explanation), print summary, browser autosave with restore (Playwright)
 - [x] Synthetic benchmark (`docs/benchmark.md`): 21 rooms, 0 verification mismatches, reproducible; found + fixed an optimizer gap
-- [x] Playwright flows (19 tests incl. building a room from scratch; AI routes mocked)
+- [x] Playwright flows (20 tests incl. building a room from scratch; AI routes mocked)
 
 - [x] Demo script (`docs/demo-script.md`)
 

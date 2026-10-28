@@ -159,6 +159,12 @@ export function RequestPanel({ scenario, update, metaConfigured }: {
             <div className="text-xs text-amber-900">
               <p className="font-medium">SpaceAble can&apos;t assess:</p>
               <ul className="list-disc pl-4">{review.proposal.unsupported_requests.map((q) => <li key={q}>{q}</li>)}</ul>
+              {review.proposal.unsupported_requests.some((q) => /\bADA\b/i.test(q)) && (
+                <p className="mt-1 text-slate-700">
+                  For the ADA dimensions SpaceAble can measure, use <strong>ADA reference check</strong> under
+                  “Check this layout”. It is a reference, not a compliance determination.
+                </p>
+              )}
             </div>
           )}
           <div className="flex gap-2">

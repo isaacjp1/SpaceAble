@@ -251,7 +251,10 @@ export function templateExplanation(e: Evidence): string {
 }
 
 const NUMBER = /\d+(?:\.\d+)?/g;
-const CLAIM = /\bADA\b|complian|certif|guarantee|wheelchair[- ]accessible|fully accessible|\bsafe(ly)?\b|\bsafety\b/i;
+const CLAIM = /complian|\bcompl(y|ies)\b|certif|guarantee|wheelchair[- ]accessible|fully accessible|\bsafe(ly)?\b|\bsafety\b|\bmeets?\b[^.!?]*\bADA\b/i;
+// The ADA may be named as the reference check ("passes 3 of the 5 ADA reference rules"); any other
+// sentence about it counts as a claim.
+const adaClaim = (sentence: string) => /\bADA\b/.test(sentence) && !/\breference\b/i.test(sentence);
 const NEGATION = /\b(not|no|never|cannot|without)\b|n't\b/i;
 
 /** Reject explanations with numbers absent from the evidence or unsupported positive claims. */
@@ -265,7 +268,7 @@ export function checkExplanation(text: string, e: unknown, alsoKnown: number[] =
     }
   }
   for (const sentence of text.split(/(?<=[.!?])\s+/)) {
-    if (CLAIM.test(sentence) && !NEGATION.test(sentence)) {
+    if ((CLAIM.test(sentence) || adaClaim(sentence)) && !NEGATION.test(sentence)) {
       return { ok: false, reason: `it makes a claim the planner cannot support ("${sentence.trim().slice(0, 80)}")` };
     }
   }

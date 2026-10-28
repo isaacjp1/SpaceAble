@@ -3,6 +3,7 @@ import type {
   ChatCompletionMessageFunctionToolCall, ChatCompletionMessageParam,
 } from "openai/resources/chat/completions";
 import { z } from "zod";
+import { ADA_CHANGES, adaScenario } from "@/lib/ada";
 import { checkExplanation } from "@/lib/ai";
 import {
   type AssistantEvent, type AssistantRun, MAX_CALLS_PER_ROUND, MAX_HISTORY, MAX_ROUNDS, MAX_RUNS, type ToolName,
@@ -24,7 +25,7 @@ const Body = z.strictObject({
   question: z.string().trim().min(3).max(1000),
   history: z.array(TurnSchema).max(MAX_HISTORY).default([]),
 });
-const TOOLS: string[] = ["check_layout", "find_layouts"] satisfies ToolName[];
+const TOOLS: string[] = ["check_layout", "find_layouts", "ada_reference_check"] satisfies ToolName[];
 const DEADLINE_MS = 100_000; // after this Muse answers with whatever has run
 const OPTIMIZE_LIMIT_S = 5;
 
@@ -68,7 +69,7 @@ type Ran = { content: string; run: AssistantRun | null }; // content: what Muse 
 async function runTool(p: Planned, send: (e: AssistantEvent) => void, signal: AbortSignal): Promise<Ran> {
   if ("error" in p) return { content: JSON.stringify({ error: p.error }), run: null };
   try {
-    const result = p.tool === "check_layout"
+    const result = p.tool !== "find_layouts" // check_layout and the ADA reference check analyze
       ? await plannerJson<ValidationResult>("/v1/planner/analyze", { scenario: p.scenario }, 30_000, signal)
       : await plannerJson<OptimizationResult>("/v1/planner/optimize",
         { scenario: p.scenario, options: { time_limit_s: OPTIMIZE_LIMIT_S } }, 40_000, signal);
@@ -119,6 +120,7 @@ async function converse(client: OpenAI, s: RoomScenario, question: string, histo
       const tool = call.function.name as ToolName;
       if (i >= space) return { call, tool, error: "Too many checks at once; ask for fewer next round." };
       if (!TOOLS.includes(tool)) return { call, tool, error: `There is no tool called ${call.function.name}.` };
+      if (tool === "ada_reference_check") return { call, tool, scenario: adaScenario(s), changes: ADA_CHANGES };
       let args: unknown;
       try { args = JSON.parse(call.function.arguments); } catch { return { call, tool, error: "The arguments were not JSON." }; }
       const applied = applyChanges(s, tool, args, said);

@@ -151,6 +151,48 @@ in an optional "Still to place" check.
 - A piece with no legal spot is reported as "No spot for the new X".
 - An unplaced piece can't be fixed or locked (422).
 
+## ADA reference check
+
+`lib/ada.ts` builds a copy of the room with the dimensional values of the 2010 ADA Standards (verified
+against the U.S. Access Board text, 2026-10-27), and the planner's ordinary `analyze` checks that copy.
+The person's own requirements are not changed. Each rule maps onto existing checks:
+
+| Rule | Value used | Checked by | Where it differs from the ADA |
+| --- | --- | --- | --- |
+| 404.2.3 door clear width | 32 in (81.28 cm) | `door-clearance` | none (measure with the door open 90°) |
+| 403.5.1 route clear width | 36 in (91.44 cm) | route checks to the places the person needs to reach | stricter: the 32 in allowance for stretches up to 24 in long isn't modelled |
+| 304.3 turning space | 60 in (152.4 cm) circle | `turning-space` | stricter: the T-shaped space isn't modelled |
+| 305.3 clear floor space | 30 × 48 in (76.2 × 121.92 cm) | approach zones: forward (30 in wide, 48 in deep) at desks and tables, side-on (48 in along) elsewhere | none |
+| 806.2.3 both sides of a bed | 30 × 48 in, side-on | added zones `ada-<bed>-<side>` on both long sides, with their routes | a hotel guest-room rule; the panel says so |
+
+A rule with nothing to check (no door, no bed, no places marked) is "not checked". The panel also
+lists 10 ADA areas a 2D plan can't check: door maneuvering clearance, floor surfaces, changes in
+level, door hardware and force, protruding objects, reach ranges, knee and toe clearance, operable
+parts, storage, and toilet and bathing rooms. It never reports compliance, and its note says the ADA
+covers public places such as hotels, not most private homes.
+
+**Show on the plan** opens the ADA copy through the same what-if banner as the assistant, so
+**Back to my room** restores the person's room and the report stays current.
+
+In the assistant, `ada_reference_check` runs the same check. `use_ada_values` on `check_layout` and
+`find_layouts` applies a what-if to the ADA copy, so a search for "what would fix this" uses the
+ADA dimensions instead of the person's own. The number check accepts sentences that name the ADA
+as the reference check ("passes 1 of the 5 ADA reference rules"). It still rejects "meets the ADA",
+"complies" and any other ADA sentence without "reference", unless the sentence is negated.
+
+Live-verified 2026-10-27 on the sample bedroom (real Muse and planner):
+- **The panel:** 1 of 5 rules pass. The 90 cm door passes. These fail: the 91.44 cm route to the
+  desk, the 152.4 cm turning circle, the desk's clear floor space (it overlaps the dresser), and
+  both sides of the bed (left overlaps the dresser; right extends past a wall).
+- **"Does my room meet ADA?"** (4.1 s): ran the check and said "passed 1 of 5 rules and failed 4 …
+  This is not a compliance determination", naming each failure.
+- **"What could I move to fix the clear floor space at my desk?"** (13.8 s): a first run, without
+  `use_ada_values`, searched with the person's 80 cm needs and implied it fixed the ADA failure;
+  that is why the flag and the prompt rule exist. With them, Muse searched with the ADA values,
+  relayed the planner's finding that moving furniture can't fix every rule (the bed's right side is
+  against a wall), and then checked a what-if with the dresser moved. That what-if clears the desk's
+  30 × 48 in space, with a verified 93.4 cm route.
+
 ## Security and deployment
 
 - The planner is server-to-server only. With `PLANNER_SHARED_SECRET` set (required in production), every

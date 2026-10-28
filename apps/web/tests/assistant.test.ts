@@ -47,6 +47,16 @@ describe("applying a tool call", () => {
     expect(applyChanges(scenario, "check_layout", { ...keep, route_width_cm: 80 }, []).ok).toBe(true);
   });
 
+  it("can start from the ADA reference copy, so a search uses the ADA dimensions", () => {
+    const r = applyChanges(scenario, "find_layouts", { ...keep, use_ada_values: true, locked_object_ids: ["bed", "dresser"] }, []);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.scenario.requirements).toMatchObject({ route_width_cm: 91.44, turning_diameter_cm: 152.4,
+      locked_object_ids: ["bed", "dresser"] });
+    expect(r.scenario.destinations.map((d) => d.id)).toContain("ada-bed-left");
+    expect(r.changes[0]).toMatch(/^ADA 2010 reference: 36 in/);
+    expect(r.changes.at(-1)).toBe("Kept in place: Bed, Dresser");
+  });
+
   it("rejects unknown furniture", () => {
     expect(applyChanges(scenario, "check_layout", { ...keep, remove_object_ids: ["piano"] }, []))
       .toEqual({ ok: false, error: expect.stringContaining("Unknown id(s): piano") });

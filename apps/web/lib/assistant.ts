@@ -2,6 +2,7 @@
 // answer is checked against the planner's results. Pure helpers shared by the route and the UI.
 import { z } from "zod";
 import { PROFILES, buildEvidence, idList } from "./ai";
+import { ADA_CHANGES, ADA_NOTE, ADA_NOT_CHECKED, adaCounts, adaReport, adaScenario } from "./ada";
 import { describeMove } from "./geometry-ui";
 import {
   KINDS, RoomScenarioSchema, type OptimizationResult, type RoomScenario, type ValidationResult,
@@ -14,7 +15,7 @@ export const MAX_HISTORY = 4; // earlier turns sent back for follow-up questions
 const NEW_PIECE_APPROACH = { approach_width_cm: 80, approach_depth_cm: 90 }; // as "Add approach zone"
 const SIDES = ["top", "right", "bottom", "left"] as const;
 
-export type ToolName = "check_layout" | "find_layouts";
+export type ToolName = "check_layout" | "find_layouts" | "ada_reference_check";
 export type RunSummary = Record<string, unknown>;
 export interface AssistantRun {
   id: string;
@@ -51,6 +52,7 @@ export function assistantTools(s: RoomScenario) {
     x_cm: { type: "number" }, y_cm: { type: "number" }, rotation_deg: { type: "integer", enum: [0, 90, 180, 270] },
   };
   const changes = (placed: boolean) => ({
+    use_ada_values: { type: "boolean" }, // start from the ADA reference copy of the room
     route_width_cm: { type: ["number", "null"] },
     turning_diameter_cm: { type: ["number", "null"] },
     locked_object_ids: orNull(idList(pieces)),
@@ -80,6 +82,10 @@ export function assistantTools(s: RoomScenario) {
       "planner places any new furniture itself. Returns up to 3 options with their moves and widest " +
       "route. null keeps the current value.",
     object({ ...changes(false), optimization_profile: orNull({ type: "string", enum: [...PROFILES] }) })),
+    tool("ada_reference_check", "Compare the room as it is with the 2010 ADA Standards' dimensional rules " +
+      "SpaceAble can measure: 36 in routes, 32 in door, 60 in turning circle, 30 × 48 in clear floor " +
+      "spaces, and both sides of each bed. A reference check, not a compliance determination. No arguments.",
+    object({})),
   ];
 }
 
@@ -96,6 +102,7 @@ const Changes = z.strictObject({
   locked_object_ids: z.array(z.string()).max(40).nullable(),
   required_destination_ids: z.array(z.string()).max(20).nullable(),
   remove_object_ids: z.array(z.string()).max(40),
+  use_ada_values: z.boolean().optional(),
   add_furniture: z.array(z.strictObject({
     label: z.string().trim().min(1).max(40), kind: z.enum(KINDS), width_cm: cm, depth_cm: cm,
     approach_side: blankIsNull(z.enum(SIDES).nullable()),
@@ -129,8 +136,9 @@ const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((
 const slug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "piece";
 
 /** The what-if room for one tool call, or an error Muse can act on. Sizes and widths must come
- * from the person's words (`said`); positions need not, because the planner checks them. */
-export function applyChanges(s: RoomScenario, tool: ToolName, raw: unknown, said: number[]):
+ * from the person's words (`said`); positions need not, because the planner checks them. With
+ * use_ada_values the changes apply to the ADA reference copy of the room instead. */
+export function applyChanges(room: RoomScenario, tool: ToolName, raw: unknown, said: number[]):
   { ok: true; scenario: RoomScenario; changes: string[] } | { ok: false; error: string } {
   const parsed = Changes.safeParse(raw, { reportInput: true });
   if (!parsed.success) {
@@ -138,6 +146,7 @@ export function applyChanges(s: RoomScenario, tool: ToolName, raw: unknown, said
     return { ok: false, error: `Invalid arguments (${i.path.join(".")}: ${i.message}; got ${JSON.stringify(i.input)}).` };
   }
   const c = parsed.data;
+  const s = c.use_ada_values ? adaScenario(room) : room;
   const ids = new Set(s.objects.filter((o) => !o.to_place).map((o) => o.id));
   const dests = new Set(s.destinations.map((d) => d.id));
   const unknown = [...(c.locked_object_ids ?? []), ...c.remove_object_ids, ...(c.move ?? []).map((m) => m.object_id)]
@@ -159,7 +168,7 @@ export function applyChanges(s: RoomScenario, tool: ToolName, raw: unknown, said
   const label = (id: string) => s.objects.find((o) => o.id === id)?.label ?? id;
   const next = structuredClone(s);
   const req = next.requirements;
-  const changes: string[] = [];
+  const changes: string[] = c.use_ada_values ? [...ADA_CHANGES] : [];
   if (c.remove_object_ids.length) { // first, so later lists can't point at a removed piece
     const gone = new Set(c.remove_object_ids);
     const goneDests = new Set(next.destinations.filter((d) => gone.has(d.object_id)).map((d) => d.id));
@@ -227,6 +236,12 @@ export function applyChanges(s: RoomScenario, tool: ToolName, raw: unknown, said
 /** A compact record of one planner run, for Muse and for follow-up questions. */
 export function summarizeRun(tool: ToolName, changes: string[], s: RoomScenario,
   result: ValidationResult | OptimizationResult): RunSummary {
+  if (tool === "ada_reference_check") { // s is the ADA copy of the room
+    const rows = adaReport(s, result as ValidationResult);
+    return { tool, note: ADA_NOTE, ...adaCounts(rows),
+      rules: rows.map(({ rule, title, requirement, status, detail }) => ({ rule, title, requirement, status, detail })),
+      other_rules_not_checked_list: ADA_NOT_CHECKED.map(([rule, what]) => `${rule}: ${what}`) };
+  }
   if (tool === "check_layout") {
     const v = result as ValidationResult;
     const { before } = buildEvidence(s, v);
@@ -285,9 +300,14 @@ export function assistantMessages(s: RoomScenario, question: string, history: Tu
         "Answer in 2 to 5 short, plain sentences: no markdown, no lists, furniture by its label and " +
         "never by id. Use only numbers from the tool results, the room or the person's words, exactly " +
         "as given, in cm. Report what the planner did without guessing why it moved a piece. Say which " +
-        "what-if they can load to see it. Decline anything the planner can't " +
-        "assess (building codes, ADA, medical or equipment advice) in one sentence. Never claim " +
-        "compliance, certification, safety or guaranteed access.",
+        "what-if they can load to see it. For questions about the ADA, run ada_reference_check and " +
+        "say how many of its rules pass and which fail; call it the ADA reference check, say it is not " +
+        "a compliance determination, and that SpaceAble doesn't check the other ADA rules. To look for " +
+        "a rearrangement that passes the ADA reference rules, call find_layouts with use_ada_values " +
+        "true; otherwise use_ada_values is false and searches use the person's own requirements, so " +
+        "never present such a result as fixing an ADA reference failure. Never say a " +
+        "room meets or complies with the ADA. Decline other building-code, medical or equipment " +
+        "questions in one sentence. Never claim compliance, certification, safety or guaranteed access.",
     },
     { role: "user" as const, content: JSON.stringify({ room: roomSummary(s), earlier, question }) },
   ];
@@ -302,6 +322,11 @@ export function templateAnswer(runs: AssistantRun[]): string {
   if (!runs.length) return "No planner check was run, so there is nothing verified to report yet.";
   return runs.map((r) => {
     const what = r.changes.length ? r.changes.join("; ") : "the room as it is";
+    if (r.tool === "ada_reference_check") {
+      const rows = adaReport(r.scenario, r.result as ValidationResult);
+      return `ADA reference check (not a compliance determination): ${adaCounts(rows).passed} of ${rows.length} ` +
+        `rules pass. ${rows.map((x) => `${x.rule} ${x.title}: ${x.status.replace("_", " ")}`).join("; ")}.`;
+    }
     if (r.tool === "check_layout") {
       const v = r.result as ValidationResult;
       const verdict = v.status === "pass" ? "passes" : v.status === "fail" ? "does not pass" : "needs more information";

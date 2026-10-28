@@ -129,6 +129,21 @@ describe("POST /api/ai/assistant", () => {
     expect((await ask("How wide was option 1?", [{ ...earlier, same_room: false }])).answer.source).toBe("template");
   });
 
+  it("runs the ADA reference check on a copy of the room with the ADA values", async () => {
+    const { plannerCalls } = mock([
+      { tools: [{ name: "ada_reference_check", args: {} }] },
+      { text: "On the ADA reference check, none of the 5 rules pass. This is not a compliance determination." },
+    ], { analyze: validation("fail") });
+    const { events, answer } = await ask("Does my room meet ADA?");
+    expect(plannerCalls.map((c) => c.path)).toEqual(["/v1/planner/analyze"]);
+    const sent = plannerCalls[0].body.scenario as unknown as { requirements: object; destinations: { id: string }[] };
+    expect(sent.requirements).toMatchObject({ route_width_cm: 91.44, door_min_clear_width_cm: 81.28, turning_diameter_cm: 152.4 });
+    expect(sent.destinations.map((d) => d.id)).toContain("ada-bed-right");
+    const run = events.find((e) => e.type === "run");
+    expect(run?.type === "run" && run.run.summary).toMatchObject({ tool: "ada_reference_check", rules_checked: 5 });
+    expect(answer.source).toBe("muse");
+  });
+
   it("stops offering tools after the last round so Muse has to answer", async () => {
     const again = { tools: [{ name: "check_layout", args: keep }] };
     const { muse } = mock([again, again, again, { text: "It does not pass yet." }], { analyze: validation("fail") });

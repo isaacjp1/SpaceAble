@@ -27,7 +27,7 @@ export function HelpDialog({ ref }: { ref: React.Ref<HTMLDialogElement> }) {
           <li>The person and device are modelled as a circle as wide as your route. This is not a simulation of how a wheelchair turns.</li>
           <li>Door swing and door maneuvering space are not modelled.</li>
           <li>“No route found” means none was found on the search grid, not that none exists.</li>
-          <li>Nothing here checks ADA or any building code, and it is no substitute for an occupational therapist.</li>
+          <li><strong>ADA reference check</strong> compares your plan with 5 dimensional rules of the 2010 ADA Standards (route and door widths, turning circle, clear floor spaces, both sides of a bed) and lists what it doesn’t check. It is not a compliance determination, the ADA applies to public places rather than most homes, and nothing here checks any building code. It is no substitute for an occupational therapist.</li>
         </ul>
         <h3 className="font-semibold text-slate-900">Privacy</h3>
         <p>Rooms stay in your browser unless you export them. Photos are resized in your browser, sent to Meta’s API only when you press Detect, and not stored by SpaceAble. Voice recordings are sent to Meta’s API only when you stop recording, with your furniture names as hints, and are not stored either. What you said appears in the text box for you to check first.</p>

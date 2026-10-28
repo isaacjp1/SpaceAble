@@ -1,5 +1,6 @@
 "use client";
 
+import { ADA_NOTE, ADA_NOT_CHECKED, type AdaRow } from "@/lib/ada";
 import { applyMoves, dims, fmtCm } from "@/lib/geometry-ui";
 import type { Alternative, RoomScenario, ValidationResult } from "@/lib/schema";
 import type { Explanation } from "./AiPanels";
@@ -9,9 +10,9 @@ import { DISCLAIMER, title } from "./ValidationPanel";
 const STATUS = { pass: "✓ Pass", fail: "✗ Fail", needs_input: "? Needs input", not_checked: "– Not checked", unknown: "? Unknown" };
 
 /** Printed instead of the app (see the print: classes in Planner). */
-export function PrintSummary({ scenario, result, baseline, alternative, explanation, inches }: {
+export function PrintSummary({ scenario, result, baseline, alternative, explanation, ada, inches }: {
   scenario: RoomScenario; result: ValidationResult | null; baseline: ValidationResult | null;
-  alternative: Alternative | null; explanation: Explanation | null; inches: boolean;
+  alternative: Alternative | null; explanation: Explanation | null; ada: AdaRow[] | null; inches: boolean;
 }) {
   const shownScenario = alternative ? applyMoves(scenario, alternative.moves) : scenario;
   const req = scenario.requirements;
@@ -104,6 +105,25 @@ export function PrintSummary({ scenario, result, baseline, alternative, explanat
         <section>
           <h2 className="font-semibold">Explanation ({explanation.source === "muse" ? `Meta ${explanation.model}, numbers checked against the planner` : "built-in, no AI"})</h2>
           <p>{explanation.text}</p>
+        </section>
+      )}
+
+      {ada && (
+        <section>
+          <h2 className="font-semibold">ADA 2010 reference check</h2>
+          <p className="border border-black p-2">{ADA_NOTE}</p>
+          <table className="mt-1 w-full border-collapse">
+            <thead><tr>{["Rule", "Requires", "Result", "Details"].map((h) => <th key={h} className={cell}>{h}</th>)}</tr></thead>
+            <tbody>
+              {ada.map((r) => (
+                <tr key={r.rule}>
+                  <td className={cell}>{r.rule} {r.title}</td><td className={cell}>{r.requirement}</td>
+                  <td className={cell}>{STATUS[r.status]}</td><td className={cell}>{r.detail} {r.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-1">Not checked: {ADA_NOT_CHECKED.map(([rule, what]) => `${rule} ${what}`).join("; ")}.</p>
         </section>
       )}
 

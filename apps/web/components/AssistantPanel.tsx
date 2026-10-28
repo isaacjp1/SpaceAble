@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { adaCounts, adaReport } from "@/lib/ada";
 import { type AssistantEvent, type AssistantRun, MAX_HISTORY, type Turn } from "@/lib/assistant";
 import type { ApiError, OptimizationResult, RoomScenario, ValidationResult } from "@/lib/schema";
 import { MicButton } from "./MicButton";
@@ -23,7 +24,16 @@ type Exchange = {
 
 const what = (changes: string[] | null) => (changes?.length ? changes.join("; ") : "the room as it is");
 
+const VERB: Record<AssistantRun["tool"], [string, string]> = { // [in progress, done]
+  check_layout: ["Checking", "Checked"], find_layouts: ["Searching", "Searched"],
+  ada_reference_check: ["Running", "Ran"],
+};
+
 export function outcome(run: AssistantRun): string {
+  if (run.tool === "ada_reference_check") {
+    const rows = adaReport(run.scenario, run.result as ValidationResult);
+    return `${adaCounts(rows).passed} of ${rows.length} ADA reference rules pass (not a compliance determination).`;
+  }
   if (run.tool === "check_layout") {
     const v = run.result as ValidationResult;
     const verdict = v.status === "pass" ? "Passes" : v.status === "fail" ? "Does not pass" : "Needs more information";
@@ -45,7 +55,7 @@ function fold(t: Exchange, e: AssistantEvent): Exchange {
     case "tools":
       return { ...t, steps: [...settle(t.steps), ...e.calls.map((c): Step => ({
         key: c.id, state: c.error ? "failed" : "active", detail: c.error ?? undefined,
-        label: `${c.tool === "check_layout" ? "Checking" : "Searching"}: ${c.error ? "not run" : what(c.changes)}`,
+        label: `${VERB[c.tool]?.[0] ?? "Running"}: ${c.error ? "not run" : c.tool === "ada_reference_check" ? "the ADA reference check" : what(c.changes)}`,
       }))] };
     case "run":
       return { ...t, runs: [...t.runs, e.run],
@@ -188,8 +198,8 @@ function ExchangeView({ x, live, onLoad }: { x: Exchange; live: boolean; onLoad:
           {x.runs.map((run) => (
             <li key={run.id} className="flex flex-col gap-1 rounded border border-indigo-100 bg-indigo-50/50 p-2 text-xs text-slate-700">
               <span className="flex items-start justify-between gap-2">
-                <span className="font-medium">{run.tool === "check_layout" ? "Checked" : "Searched"}: {what(run.changes)}</span>
-                <StatusBadge status={run.tool === "check_layout" ? (run.result as ValidationResult).status
+                <span className="font-medium">{run.tool === "ada_reference_check" ? "ADA reference check" : `${VERB[run.tool][1]}: ${what(run.changes)}`}</span>
+                <StatusBadge status={run.tool !== "find_layouts" ? (run.result as ValidationResult).status
                   : (run.result as OptimizationResult).alternatives.length ? "pass" : "fail"} />
               </span>
               <span>{outcome(run)}</span>

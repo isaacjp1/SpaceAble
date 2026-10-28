@@ -9,9 +9,11 @@ import {
   RoomScenarioSchema, type Alternative, type ApiError, type OptimizationResult, type RoomScenario,
   type ValidationResult,
 } from "@/lib/schema";
+import { ADA_CHANGES, adaReport, adaScenario } from "@/lib/ada";
 import type { AssistantRun } from "@/lib/assistant";
 import { type Explanation, ExplanationView, RequestPanel } from "./AiPanels";
 import { AlternativesPanel } from "./AlternativesPanel";
+import { AdaPanel } from "./AdaPanel";
 import { AssistantPanel } from "./AssistantPanel";
 import { FurniturePanel, RequirementsPanel, RoomPanel, Section, type Update } from "./Panels";
 import { HelpDialog } from "./HelpDialog";
@@ -52,13 +54,15 @@ export function Planner() {
   const [optimization, setOptimization] = useState<Optimization | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [timeLimit, setTimeLimit] = useState(10);
-  const [busy, setBusy] = useState<"analyze" | "optimize" | "explain" | null>(null);
+  const [busy, setBusy] = useState<"analyze" | "optimize" | "explain" | "ada" | null>(null);
   const [explanation, setExplanation] = useState<{ key: ValidationResult; data: Explanation } | null>(null);
   const [view, setView] = useState<"plan" | "photo">("plan");
   const [compare, setCompare] = useState(false);
   const [inches, setInches] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [whatIf, setWhatIf] = useState<WhatIf | null>(null);
+  // The ADA reference check ran on `copy`, a copy of `scenario` with the ADA values.
+  const [ada, setAda] = useState<{ scenario: RoomScenario; copy: RoomScenario; result: ValidationResult } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const help = useRef<HTMLDialogElement>(null);
   const previous = useSyncExternalStore(storage.subscribe, () => storage.get(PREVIOUS), () => null);
@@ -110,10 +114,11 @@ export function Planner() {
     setSelectedId(null);
     setError(null);
     setWhatIf(null);
+    setAda(null);
   };
 
   // The what-if room and its planner result go on screen together, so neither reads as stale.
-  const loadWhatIf = (run: AssistantRun) => {
+  const loadWhatIf = (run: Pick<AssistantRun, "tool" | "changes" | "scenario" | "result">) => {
     setWhatIf((w) => ({ changes: run.changes, room: w?.room ?? { scenario, analysis, optimization } }));
     setScenario(run.scenario);
     if (run.tool === "find_layouts") {
@@ -181,7 +186,7 @@ export function Planner() {
     else if (e.key === "Delete" || e.key === "Backspace") deleteObj(id);
   };
 
-  const call = async <T,>(kind: "analyze" | "optimize" | "explain", url: string, body: object): Promise<T | null> => {
+  const call = async <T,>(kind: "analyze" | "optimize" | "explain" | "ada", url: string, body: object): Promise<T | null> => {
     const ctrl = new AbortController();
     abort.current = ctrl;
     setBusy(kind);
@@ -233,6 +238,15 @@ export function Planner() {
     const data = await call<Explanation>("explain", "/api/ai/explain", { evidence });
     if (data) setExplanation({ key: shown, data });
   };
+
+  // The planner checks a copy of the room with the ADA values; the person's requirements stay as they are.
+  const adaCheck = async () => {
+    const sent = scenario;
+    const copy = adaScenario(sent);
+    const result = await call<ValidationResult>("ada", "/api/planner/analyze", { scenario: copy });
+    if (result) setAda({ scenario: sent, copy, result });
+  };
+  const adaRows = ada && ada.scenario === scenario ? adaReport(ada.copy, ada.result) : null;
 
   const applyAlternative = (alt: Alternative) => {
     const next = applyMoves(scenario, alt.moves);
@@ -332,7 +346,7 @@ export function Planner() {
           <div className={view === "plan" ? "flex min-h-0 flex-1 flex-col gap-2" : "hidden"}>
           {whatIf && (
             <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              <span>Showing a what-if from the assistant: {whatIf.changes.length ? whatIf.changes.join("; ") : "your room as it is"}.
+              <span>Showing a what-if: {whatIf.changes.length ? whatIf.changes.join("; ") : "your room as it is"}.
                 Your own room is kept until you choose.</span>
               <span className="ml-auto flex gap-2">
                 <button className={button} onClick={backToRoom}>Back to my room</button>
@@ -405,6 +419,9 @@ export function Planner() {
               <button onClick={explain} disabled={busy !== null || !shown} className={button}>
                 {busy === "explain" ? "Explaining…" : "Explain"}
               </button>
+              <button onClick={adaCheck} disabled={busy !== null || !issues.success} className={button}>
+                {busy === "ada" ? "Checking…" : "ADA reference check"}
+              </button>
               {busy && <button onClick={() => abort.current?.abort()} className={button}>Cancel</button>}
               <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
                 Search time limit
@@ -419,6 +436,15 @@ export function Planner() {
             )}
             {error && <p role="alert" className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-800">{error}</p>}
             {explanation && explanation.key === shown && <ExplanationView explanation={explanation.data} />}
+            {adaRows && (
+              <AdaPanel rows={adaRows} onShow={() => loadWhatIf({ tool: "ada_reference_check", changes: ADA_CHANGES,
+                scenario: ada!.copy, result: ada!.result })} />
+            )}
+            {ada && !adaRows && !whatIf && (
+              <p role="status" className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                The layout changed since the ADA reference check. Run it again for current results.
+              </p>
+            )}
             {optimization && (
               <AlternativesPanel result={optimization.result} stale={optStale} scenario={scenario}
                 previewId={preview?.id ?? null} onPreview={setPreviewId} onUse={applyAlternative} />
@@ -436,7 +462,7 @@ export function Planner() {
     {printing && <div className="hidden print:block">
       <PrintSummary scenario={scenario} result={shown} baseline={preview ? optimization!.result.baseline : null}
         alternative={preview ?? null} explanation={explanation && explanation.key === shown ? explanation.data : null}
-        inches={inches} />
+        ada={adaRows} inches={inches} />
     </div>}
     </>
   );

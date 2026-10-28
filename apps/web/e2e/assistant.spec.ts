@@ -44,7 +44,7 @@ test("an answer comes with what-ifs that can be loaded, previewed and undone, th
   // nothing changed yet; loading puts the what-if and its verified options on screen
   await expect(page.getByRole("button", { name: /^Shelf/ })).toHaveCount(0);
   await page.getByRole("button", { name: "Load this what-if" }).click();
-  await expect(page.getByText(/Showing a what-if from the assistant: Kept in place: Bed, Dresser/)).toBeVisible();
+  await expect(page.getByText(/Showing a what-if: Kept in place: Bed, Dresser/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Shelf (not placed yet)" })).toBeVisible();
   const first = page.getByRole("listitem").filter({ hasText: "Option 1" });
   await expect(first.getByText(/Shelf \(new\): placed at/)).toBeVisible();
