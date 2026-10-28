@@ -69,15 +69,42 @@ Without a Meta key, everything except the AI features works. The header shows wh
 online and whether a key is configured, never the key itself. **Help & limits** in the app walks through
 the workflow. Deployment: [`docs/deploy.md`](docs/deploy.md).
 
-## iPhone app and room scanning
+## iPhone app
 
-`apps/ios` is a small iPhone app: the website in a web view, plus **Scan room**, which measures the room
-with Apple's RoomPlan (an iPhone or iPad with a LiDAR scanner, iOS 17+). The scan opens in the planner as a
-draft. It is converted inside the page on the phone and never uploaded. Only rectangular rooms are supported.
+`apps/ios` is a native iPhone app for people who don't want the measurements. It has four screens:
 
-A scan is a draft, not a measurement to rely on. Every piece and door comes in unconfirmed, so **Analyze**
-asks for input until you have checked each one. Check the room size too, and measure doors with a tape
-measure: the scan measures the door frame, which is wider than the clear opening.
+1. **How do you get around?** Wheelchair, power chair or scooter, walker or rollator, crutches, or cane.
+   You can also describe it in your own words (Muse Spark picks the closest option and the pieces you mention).
+2. **Scan your room** with Apple's RoomPlan (an iPhone or iPad with a LiDAR scanner, iOS 17+).
+   **Try a sample room** works on any phone.
+3. **Does this look right?** The scanned plan. Tap a piece to mark it as one you need to reach, one that
+   must stay put, or one that isn't really there. Tap a door to make it the way in. Then tap **Looks right**
+   once to confirm.
+4. **Your plan.** A headline such as "Move 1 thing and you can get from the door to the bed and the desk
+   with a wheelchair", numbered steps ("Move the dresser against the wall with the door"), and the plan with
+   arrows and the route. When there are two options you choose between "Fewest changes" and "Most space".
+   The measurements are under **Details**.
+
+The planner still decides every result. The app only turns "crutches" into numbers, using a fixed table of
+planning defaults (`PROFILES` in `apps/web/lib/simple.ts`). They are not clinical advice:
+
+| | Path width | Doorway | Turning circle | Space at each piece |
+| --- | --- | --- | --- | --- |
+| Wheelchair | 91.44 cm (36 in) | 81.28 cm (32 in) | 152.4 cm (60 in) | 30 × 48 in (ADA) |
+| Power chair or scooter | 100 cm | 81.28 cm | 180 cm | 30 × 48 in |
+| Walker or rollator | 90 cm | 81.28 cm | none | 80 × 90 cm |
+| Crutches | 90 cm | 76 cm | none | 80 × 90 cm |
+| Cane | 75 cm | 76 cm | none | 80 × 90 cm |
+
+Places you need to reach start as the beds, tables, sofas, storage and fixtures such as the toilet. Each
+one's space goes on the side with the most floor in front of it. A scan measures the door frame, which is
+wider than the opening. If even that is too narrow, the app says so, asks you to measure it, and plans the
+furniture anyway. Only rectangular rooms are supported.
+
+The app talks to the web app's `/api/app/draft` and `/api/app/plan` routes, so the website (and the planner
+behind it) must be deployed. The address is `https://spaceable.vercel.app` unless `SpaceAbleServer` in
+`apps/ios/Info.plist` says otherwise; plain-http local addresses work for a dev server on your network.
+The detailed website is unchanged and still opens a raw scan file with **Load JSON**.
 
 The app builds on Linux or WSL with [xtool](https://github.com/xtool-org/xtool), no Mac needed:
 
@@ -90,8 +117,6 @@ xtool dev          # build, install and run on a connected iPhone
 
 The first install needs Developer Mode on the phone and the developer certificate trusted under
 Settings > General > VPN & Device Management. With a free Apple ID, the install expires after 7 days.
-The app loads the site from `siteURL` in `apps/ios/Sources/SpaceAble/SiteView.swift`. **Load JSON** also
-opens a raw scan file in any browser.
 
 ## How it decides
 
@@ -111,7 +136,7 @@ and say nothing about real homes.
 ```bash
 cd services/planner && pytest -q && ruff check .        # 73 tests: geometry, routes, optimizer, API, benchmark
 cd services/planner && python -m app.benchmark --repeat --write ../../docs/benchmark.md
-cd apps/web && npm run test && npm run lint && npm run typecheck   # 83 tests, Meta and the planner mocked at the fetch layer
+cd apps/web && npm run test && npm run lint && npm run typecheck   # 96 tests, Meta and the planner mocked at the fetch layer
 cd apps/web && npx playwright install --with-deps chromium && npm run test:e2e   # 22 browser flows, AI routes mocked
 cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed speech.wav   # REAL, billed Meta calls
 ```
@@ -120,7 +145,7 @@ cd apps/web && npm run smoke:meta -- path/to/consented-photo.jpg bed speech.wav 
 
 ```text
 apps/web/            Next.js 16 UI + API routes (planner proxy, Meta proxy; keys stay server-side)
-apps/ios/            iPhone app (SwiftPM, built with xtool): the site in a web view plus native LiDAR room scanning
+apps/ios/            iPhone app (SwiftUI, built with xtool): LiDAR scan → how you get around → proposed rearrangement
 services/planner/    FastAPI + Shapely geometry engine and optimizer (the only place pass/fail is decided)
 shared/fixtures/     test rooms used by both sides, the tests and the benchmark
 shared/schemas/      JSON Schema exported from the Pydantic models
@@ -142,8 +167,9 @@ docs/                architecture, benchmark, deployment, demo script, screensho
 Rooms stay in your browser unless you export them. Photos are resized in the browser (which drops EXIF/GPS),
 sent to Meta only when you press Detect, and not stored or logged by SpaceAble. Voice recordings are
 converted to WAV in the browser, sent to Meta only when you stop recording, and not stored or logged
-either; your furniture names go with them as recognition hints. Room scans from the iPhone app are
-converted inside the page on the phone; the raw scan is never uploaded. Meta's terms govern
+either; your furniture names go with them as recognition hints. The iPhone app sends the scan
+(room geometry and furniture boxes only, no camera images) to the web app to be converted; it is not stored
+or logged. A raw scan opened with **Load JSON** on the website is converted in the browser. Meta's terms govern
 processing on their side. The Meta key and the planner's shared secret are server-only. The planner rejects
 any caller without the secret.
 

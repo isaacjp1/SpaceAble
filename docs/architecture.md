@@ -1,13 +1,12 @@
 # SpaceAble architecture
 
 ```text
-iPhone app (apps/ios: WKWebView + RoomPlan scanner)
-   │  raw CapturedRoom JSON → window.spaceableImportScan (stays on the phone)
-   ▼
-browser (Next.js page, SVG floor-plan editor; lib/roomplan.ts turns a scan into a draft RoomScenario)
-   │  RoomScenario JSON (cm), photo, free text
-   ▼
-Next.js API routes  (server-only MODEL_API_KEY)
+iPhone app (apps/ios: SwiftUI + RoomPlan scanner)            browser (Next.js page, SVG floor-plan editor)
+   │  raw CapturedRoom JSON, mobility aid, checked choices   │
+   ▼                                                         │  RoomScenario JSON (cm), photo, free text
+Next.js API routes  (server-only MODEL_API_KEY)  ◄───────────┘
+   ├─ /api/app/draft           → lib/roomplan.ts: scan → draft room, default places to reach, way in
+   ├─ /api/app/plan            → lib/simple.ts profile → optimize → plain-language result (Muse reads free text)
    ├─ /api/health              → planner reachability + whether Meta is configured
    ├─ /api/planner/analyze     → FastAPI POST /v1/planner/analyze
    ├─ /api/planner/optimize    → FastAPI POST /v1/planner/optimize
@@ -211,12 +210,21 @@ Live-verified 2026-10-27 on the sample bedroom (real Muse and planner):
 
 ## Room scan
 
-The iPhone app (`apps/ios`) shows the site in a `WKWebView` and adds a native RoomPlan scanner. The page's
-**Scan room** button (shown only inside the app) posts to the `scanRoom` message handler. The app accepts it
-only from the main frame of the site's own host, and only on devices with LiDAR. When the person chooses
-**Use this scan**, the app encodes `CapturedRoom` with `JSONEncoder` and passes it as an argument to
-`window.spaceableImportScan` (`callAsyncJavaScript`, never string interpolation). The page converts it and
-replies with `null` or a message for an alert. **Load JSON** accepts the same raw scan.
+The iPhone app (`apps/ios`) is a thin SwiftUI client. When the person chooses **Use this scan**, it encodes
+`CapturedRoom` with `JSONEncoder` and posts it to `/api/app/draft`. That route converts the scan and adds
+the default places to reach (`defaultReach`) and the widest door as the way in (`defaultDoor`). It refuses
+a scan it can't use, or one with no door, with a message to scan again. The app keeps the returned room as
+opaque JSON and sends it back unchanged to `/api/app/plan`, together with the profile and the person's
+taps (`reach`, `keep`, `remove`, `start_door_id`). Every id is checked before anything else runs.
+`planScenario` in `lib/simple.ts` then:
+- confirms every piece and door (the **Looks right** tap is the confirmation)
+- applies the profile's widths
+- adds one required zone per piece to reach, on the side with the most floor in front of it
+
+The optimize result is turned into plain words by `summarize`. When the start door fails, the room is
+optimized again with the door taken as it is, and the headline asks for a tape measure. Muse only maps free
+text onto a profile key and piece ids; every number comes from the profile table or the planner. The
+website's **Load JSON** accepts the same raw scan and converts it in the browser.
 
 `capturedRoomToScenario` in `lib/roomplan.ts` turns the scan into a draft:
 - **Floor plane.** ARKit world space is metres, y up. Each element's centre is the transform's
@@ -236,7 +244,7 @@ replies with `null` or a message for an alert. **Load JSON** accepts the same ra
   pushes them a few cm in), with a warning past 15 cm. Pieces larger than the room are left out, and
   beyond 40 the smallest are. Overlaps stay; the editor flags them.
 - **Categories.** RoomPlan's 16 object categories map to bed, table (RoomPlan has no desk), chair and
-  sofa, or `other` for storage and televisions. Bathtubs, toilets, sinks, kitchen appliances, washer/dryers,
+  sofa, `wardrobe` for storage, or `other` for televisions. Bathtubs, toilets, sinks, kitchen appliances, washer/dryers,
   fireplaces and stairs become fixed obstacles (`movable: false`).
 - **Everything is unconfirmed** (`confirmed: false`, `label_source: "ai-inferred"`), so **Analyze** returns
   `needs_input` until the person checks each item. Room width and depth can't be marked unconfirmed,
@@ -244,8 +252,9 @@ replies with `null` or a message for an alert. **Load JSON** accepts the same ra
   door and turning widths and the optimization profile carry over; locks, required destinations and the
   start door reset, because the old ids are gone.
 
-**Privacy.** The raw scan stays in the browser, as photos do on their way to SAM: it never reaches an API
-route and is never logged. Only the converted `RoomScenario` reaches the planner, as with any room.
+**Privacy.** The app's raw scan (geometry and furniture boxes, no camera images) is converted by
+`/api/app/draft` and is not stored or logged. A scan loaded on the website stays in the browser. Only the
+converted `RoomScenario` reaches the planner, as with any room.
 
 **Unconfirmed encoding.** Until a real scan has been read, `readScan` holds every assumption about the JSON
 form of `CapturedRoom`: a column-major 4×4 `transform` (16 numbers, or 4 columns of 4) with the translation at

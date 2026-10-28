@@ -4,12 +4,12 @@
 import type { Check, RoomScenario, Side, Status, ValidationResult } from "./schema";
 
 // 1 in = 2.54 cm, written out so the values are exact.
-const ROUTE = 91.44; // 36 in, 403.5.1
-const DOOR = 81.28; // 32 in, 404.2.3
-const TURN = 152.4; // 60 in circle, 304.3.1
-const SHORT = 76.2; // 30 in } clear floor space, 305.3
-const LONG = 121.92; // 48 in }
-const FORWARD = new Set(["desk", "table"]); // used from the front, with knee space below
+export const ROUTE = 91.44; // 36 in, 403.5.1
+export const DOOR = 81.28; // 32 in, 404.2.3
+export const TURN = 152.4; // 60 in circle, 304.3.1
+export const SHORT = 76.2; // 30 in } clear floor space, 305.3
+export const LONG = 121.92; // 48 in }
+export const FORWARD = new Set(["desk", "table"]); // used from the front, with knee space below
 const BED_SIDE = "ada-"; // prefix of the zones added for both sides of each bed (806.2.3)
 
 export const ADA_CHANGES = ["ADA 2010 reference: 36 in (91.44 cm) routes, 32 in (81.28 cm) door, 60 in " +

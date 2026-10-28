@@ -42,9 +42,9 @@ export type AssistantEvent =
 
 // `type: [t, "null"]`, not anyOf: live, Muse sent strings for anyOf arrays and Meta's strict mode
 // didn't stop it.
-const orNull = ({ type, enum: values, ...rest }: { type: string; enum?: readonly unknown[]; [k: string]: unknown }) =>
+export const orNull = ({ type, enum: values, ...rest }: { type: string; enum?: readonly unknown[]; [k: string]: unknown }) =>
   ({ type: [type, "null"], ...(values ? { enum: [...values, null] } : {}), ...rest });
-const object = (properties: Record<string, object>): Record<string, unknown> =>
+export const object = (properties: Record<string, object>): Record<string, unknown> =>
   ({ type: "object", properties, required: Object.keys(properties), additionalProperties: false });
 
 export function assistantTools(s: RoomScenario) {
