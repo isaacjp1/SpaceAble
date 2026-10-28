@@ -9,8 +9,11 @@ const bed = { category: "bed", size: [1.4, 0.5, 2] as [number, number, number] }
 
 describe("squaring up the room", () => {
   it("turns a room scanned at an angle back to axis-aligned, rounding its size down", () => {
-    const { scenario, warnings } = convert({ walls: box(4, 3), objects: [{ ...bed, at: [1, 1] }] }, 30);
+    const { scenario, warnings } = convert({
+      walls: box(4, 3), doors: [{ at: [0, 1], yaw: 270, size: [0.9, 2, 0] }], objects: [{ ...bed, at: [1, 1] }],
+    }, 30);
     expect(scenario.room).toEqual({ width_cm: 400, height_cm: 300 });
+    expect(scenario.doors[0]).toMatchObject({ wall: "left", offset_cm: 55, clear_width_cm: 90 });
     expect(scenario.objects[0]).toMatchObject({ x_cm: 30, y_cm: 0, width_cm: 140, height_cm: 200, rotation_deg: 0 });
     expect(warnings).toEqual([]);
   });
@@ -131,13 +134,14 @@ describe("the scenario", () => {
       optimization_profile: "max_clearance", locked_object_ids: [], required_destination_ids: [], start_door_id: null });
   });
 
-  it("accepts the transform as 4 columns of 4 too", () => {
+  it("accepts the transform as 4 columns of 4, and walls with no curve key", () => {
     const flat = buildScan({ walls: box(4, 3), objects: [{ ...bed, at: [1, 1], yaw: 90 }] }, 30);
-    const nested = structuredClone(flat) as { walls: { transform: unknown }[]; objects: { transform: unknown }[] };
+    const nested = structuredClone(flat) as { walls: { transform: unknown; curve?: null }[]; objects: { transform: unknown }[] };
     for (const e of [...nested.walls, ...nested.objects]) {
       const t = e.transform as number[];
       e.transform = [0, 4, 8, 12].map((i) => t.slice(i, i + 4));
     }
+    for (const w of nested.walls) delete w.curve;
     expect(capturedRoomToScenario(nested, keep).scenario.objects).toEqual(capturedRoomToScenario(flat, keep).scenario.objects);
   });
 
