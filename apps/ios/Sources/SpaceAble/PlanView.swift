@@ -3,8 +3,8 @@ import SwiftUI
 /// What a tap on the plan hit.
 enum Hit { case piece(Piece), door(Door) }
 
-/// The room from above: doors, labelled pieces, and for a result, where pieces were (dashed),
-/// arrows to where they go, and the route from the door.
+/// The room from above. Checking: the places to reach. Result: the route from the door, moved pieces,
+/// and dashed outlines where they were. The way in is the dark door; locks mark pieces that stay put.
 struct PlanView: View {
     let scenario: Scenario
     var moves: [Move] = []
@@ -43,32 +43,35 @@ struct PlanView: View {
             let pt = { (x: Double, y: Double) in CGPoint(x: x * scale, y: y * scale) }
             let box = { (r: CGRect) in CGRect(x: r.minX * scale, y: r.minY * scale, width: r.width * scale, height: r.height * scale) }
             Canvas { ctx, _ in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(.secondarySystemBackground)))
-                ctx.stroke(Path(CGRect(origin: .zero, size: size)), with: .color(.primary), lineWidth: 3)
+                let floor = Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 6)
+                ctx.fill(floor, with: .color(.raised))
+                ctx.stroke(floor, with: .color(.stone), lineWidth: 4)
                 for d in scenario.doors {
                     let (a, b) = line(d)
                     var p = Path(); p.move(to: pt(a.x, a.y)); p.addLine(to: pt(b.x, b.y))
-                    ctx.stroke(p, with: .color(d.id == startDoorId ? .orange : Color(.systemBackground)), lineWidth: 6)
+                    let way = d.id == startDoorId
+                    ctx.stroke(p, with: .color(way ? .ink : .raised), style: StrokeStyle(lineWidth: way ? 8 : 5, lineCap: way ? .round : .butt))
                 }
                 for route in routes where route.count > 1 {
                     var p = Path()
                     p.addLines(route.map { pt($0[0], $0[1]) })
-                    ctx.stroke(p, with: .color(.blue.opacity(0.7)), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                    ctx.stroke(p, with: .color(.terracotta), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
                 }
                 for piece in scenario.objects {
                     let r = box(now(piece))
-                    if let m = moved(piece.id) {
+                    let move = moved(piece.id)
+                    if let m = move {
                         let was = box(rect(piece, x: m.fromXCm, y: m.fromYCm, rotation: m.fromRotationDeg))
-                        ctx.stroke(Path(was), with: .color(.secondary), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                        var arrow = Path(); arrow.move(to: CGPoint(x: was.midX, y: was.midY)); arrow.addLine(to: CGPoint(x: r.midX, y: r.midY))
-                        ctx.stroke(arrow, with: .color(.green), lineWidth: 2)
+                        ctx.stroke(Path(roundedRect: was, cornerRadius: 6), with: .color(.stone), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                        arrow(ctx, from: CGPoint(x: was.midX, y: was.midY), to: CGPoint(x: r.midX, y: r.midY))
                     }
-                    let tint: Color = moved(piece.id) != nil ? .green : keep.contains(piece.id) || !piece.movable ? .gray
-                        : reach.contains(piece.id) ? .accentColor : .brown
-                    ctx.fill(Path(roundedRect: r, cornerRadius: 3), with: .color(tint.opacity(0.35)))
-                    ctx.stroke(Path(roundedRect: r, cornerRadius: 3), with: .color(tint), lineWidth: 1.5)
-                    let label = piece.label + (keep.contains(piece.id) ? " 🔒" : "")
-                    ctx.draw(Text(label).font(.caption2.weight(.semibold)), in: r.insetBy(dx: 2, dy: 2))
+                    let tint: Color? = move != nil ? .sage : reach.contains(piece.id) ? .terracotta : nil
+                    let shape = Path(roundedRect: r, cornerRadius: 6)
+                    ctx.fill(shape, with: .color(tint?.opacity(0.16) ?? .card))
+                    ctx.stroke(shape, with: .color(tint ?? .stone), lineWidth: tint == nil ? 1.5 : 2.5)
+                    let label = keep.contains(piece.id) || !piece.movable
+                        ? Text("\(Image(systemName: "lock.fill")) \(piece.label)") : Text(piece.label)
+                    ctx.draw(label.font(.caption2.weight(.semibold)).foregroundStyle(Color.ink), in: r.insetBy(dx: 3, dy: 3))
                 }
             }
             .frame(width: size.width, height: size.height)
@@ -89,6 +92,35 @@ struct PlanView: View {
         }
         .aspectRatio(room.widthCm / room.heightCm, contentMode: .fit)
         .accessibilityElement()
-        .accessibilityLabel("Floor plan with \(scenario.objects.map(\.label).joined(separator: ", "))")
+        .accessibilityLabel("Floor plan")
+        .accessibilityValue(scenario.objects.map(\.label).joined(separator: ", "))
+    }
+
+    private func arrow(_ ctx: GraphicsContext, from a: CGPoint, to b: CGPoint) {
+        let len = hypot(b.x - a.x, b.y - a.y)
+        guard len > 12 else { return }
+        let ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, head: CGFloat = 9
+        var p = Path()
+        p.move(to: a); p.addLine(to: b)
+        p.move(to: CGPoint(x: b.x - head * (ux - uy * 0.6), y: b.y - head * (uy + ux * 0.6))); p.addLine(to: b)
+        p.addLine(to: CGPoint(x: b.x - head * (ux + uy * 0.6), y: b.y - head * (uy - ux * 0.6)))
+        ctx.stroke(p, with: .color(.sage), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+    }
+}
+
+/// What the plan's colours and marks mean, so colour is never the only cue.
+struct Legend: View {
+    let items: [(text: String, symbol: String, tint: Color)]
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { chips }
+            VStack(alignment: .leading, spacing: 6) { chips }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var chips: some View {
+        ForEach(items, id: \.text) { Chip(text: $0.text, symbol: $0.symbol, tint: $0.tint) }
     }
 }
