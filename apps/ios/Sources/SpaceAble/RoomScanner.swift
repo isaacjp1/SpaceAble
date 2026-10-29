@@ -6,7 +6,9 @@ struct RoomScanner: UIViewControllerRepresentable {
     let finish: @MainActor (CapturedRoom?) -> Void
 
     func makeUIViewController(context: Context) -> UINavigationController {
-        UINavigationController(rootViewController: ScanController(finish: finish))
+        let nav = UINavigationController(rootViewController: ScanController(finish: finish))
+        nav.view.tintColor = UIColor(Color.terracotta) // UIKit buttons don't follow SwiftUI's tint
+        return nav
     }
 
     func updateUIViewController(_ controller: UINavigationController, context: Context) {}
