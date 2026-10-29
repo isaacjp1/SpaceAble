@@ -1,3 +1,4 @@
 version: 1
 bundleID: io.github.isaacjp1.spaceable
 infoPath: Info.plist
+iconPath: AppIcon.png

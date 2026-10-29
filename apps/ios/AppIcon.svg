@@ -1,0 +1,22 @@
+<!-- Source of AppIcon.png (1024 × 1024, full bleed: iOS rounds the corners). A room from above:
+     the doorway on the left, a bed and a desk, and the route from the door to the bed. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2F6FEB"/>
+      <stop offset="1" stop-color="#1A3FA8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <!-- walls, with the doorway gap on the left wall -->
+  <path d="M192 600 V192 H832 V832 H192 V760" fill="none" stroke="#FFFFFF" stroke-width="48"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- bed and desk -->
+  <rect x="596" y="250" width="178" height="250" rx="28" fill="#FFFFFF" fill-opacity="0.32"/>
+  <rect x="596" y="250" width="178" height="74" rx="28" fill="#FFFFFF" fill-opacity="0.32"/>
+  <rect x="270" y="250" width="200" height="110" rx="24" fill="#FFFFFF" fill-opacity="0.32"/>
+  <!-- the route: in through the door, around the furniture, to the side of the bed -->
+  <path d="M196 680 H380 Q470 680 470 590 V510 Q470 420 530 420 H548" fill="none" stroke="#FFC53D"
+        stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="548" cy="420" r="40" fill="#FFC53D"/>
+</svg>
