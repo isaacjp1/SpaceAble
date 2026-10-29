@@ -252,6 +252,17 @@ struct CheckView: View {
                     Legend(items: [("To reach", "scope", .terracotta), ("Stays put", "lock.fill", .muted), ("Way in", "door.left.hand.open", .ink)])
                 }
                 .card(padding: 14)
+                if shown.doors.count > 1 { // the same choice as tapping a door, without needing the drawing
+                    Picker(selection: $draft.startDoorId) {
+                        ForEach(Array(shown.doors.enumerated()), id: \.element.id) { i, d in
+                            Text("Door \(i + 1), \(d.wall) wall").tag(Optional(d.id))
+                        }
+                    } label: {
+                        Label("Way in", systemImage: "door.left.hand.open").foregroundStyle(Color.ink)
+                    }
+                    .pickerStyle(.menu)
+                    .card(padding: 14)
+                }
                 if !draft.warnings.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(draft.warnings, id: \.self) { w in
@@ -369,12 +380,15 @@ struct ResultView: View {
     let changeWho: () -> Void
     @State private var picked = 0
 
+    // Matches summarize()'s door headline; add a status field to the plan reply if more cases appear.
+    private var worked: Bool { !plan.options.isEmpty && !plan.headline.hasPrefix("The doorway") }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Image(systemName: plan.options.isEmpty ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(plan.options.isEmpty ? Color.terracotta : Color.sage)
+                    Image(systemName: worked ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .foregroundStyle(worked ? Color.sage : Color.terracotta)
                         .accessibilityHidden(true)
                     Text(plan.headline).foregroundStyle(Color.ink)
                 }
