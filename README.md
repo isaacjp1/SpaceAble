@@ -117,6 +117,7 @@ xtool dev          # build, install and run on a connected iPhone
 
 The first install needs Developer Mode on the phone and the developer certificate trusted under
 Settings > General > VPN & Device Management. With a free Apple ID, the install expires after 7 days.
+The icon is `apps/ios/AppIcon.png` (1024 × 1024, set by `iconPath` in `xtool.yml`), drawn from `AppIcon.svg`.
 
 ## How it decides
 
