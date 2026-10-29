@@ -77,13 +77,19 @@ the workflow. Deployment: [`docs/deploy.md`](docs/deploy.md).
    You can also describe it in your own words (Muse Spark picks the closest option and the pieces you mention).
 2. **Scan your room** with Apple's RoomPlan (an iPhone or iPad with a LiDAR scanner, iOS 17+).
    **Try a sample room** works on any phone.
-3. **Does this look right?** The scanned plan. Tap a piece to mark it as one you need to reach, one that
+3. **Check your room.** The scanned plan. Tap a piece to mark it as one you need to reach, one that
    must stay put, or one that isn't really there. Tap a door to make it the way in. Then tap **Looks right**
    once to confirm.
 4. **Your plan.** A headline such as "Move 1 thing and you can get from the door to the bed and the desk
    with a wheelchair", numbered steps ("Move the dresser against the wall with the door"), and the plan with
    arrows and the route. When there are two options you choose between "Fewest changes" and "Most space".
    The measurements are under **Details**.
+
+The look follows Apple's Human Interface Guidelines with native SwiftUI and SF Symbols: warm cream and
+stone surfaces, pill-shaped buttons, light and dark mode. The colours live in
+`apps/ios/Sources/SpaceAble/Theme.swift`. `python3 apps/ios/check_contrast.py` checks every text and
+graphic pair against WCAG (7:1 for primary text, 4.5:1 for other text, 3:1 for graphics and borders).
+Plan colours always come with a legend or a symbol, so colour is never the only cue.
 
 The planner still decides every result. The app only turns "crutches" into numbers, using a fixed table of
 planning defaults (`PROFILES` in `apps/web/lib/simple.ts`). They are not clinical advice:
